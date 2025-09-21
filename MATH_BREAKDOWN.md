@@ -1,6 +1,6 @@
-# A Novel Approach to Post-Training LLMs: Preference-Guided Group Relative Policy Optimization (PG-GRPO)
+# Mathematical Breakdown of GRPO and DPO
 
-This document outlines the mathematical foundations of two prominent methods for post-training Large Language Models (LLMs): Group Relative Policy Optimization (GRPO) and Direct Preference Optimization (DPO). It then introduces a novel method, Preference-Guided Group Relative Policy Optimization (PG-GRPO), which combines the strengths of both approaches.
+This document provides a detailed mathematical breakdown of the Group Relative Policy Optimization (GRPO) and Direct Preference Optimization (DPO) algorithms used for fine-tuning large language models (LLMs). Both methods aim to align LLMs with human preferences, but they do so through different approaches and mathematical formulations.
 
 ## **1. Background: Group Relative Policy Optimization (GRPO)**
 
@@ -54,50 +54,3 @@ where:
 *   $\sigma$ is the sigmoid function.
 
 Essentially, DPO reframes the preference learning problem as a classification task, making the optimization process more stable and straightforward.
-
-## **3. Proposed Method: Preference-Guided Group Relative Policy Optimization (PG-GRPO)**
-
-PG-GRPO aims to integrate the direct preference signal from DPO into the robust, on-policy optimization framework of GRPO. The core idea is to replace the probability ratio within GRPO's clipped surrogate loss with a term derived from the DPO loss, thereby directly incorporating preference data into the advantage calculation.
-
-## **3.1. The PG-GRPO Objective Function**
-
-The proposed PG-GRPO objective function maintains the overall structure of the GRPO objective but modifies the clipped surrogate loss:
-
-$$\mathcal{L}_{\text{PG-GRPO}}(\theta) = \mathcal{L}_{\text{pref\_clip}}(\theta) - w_1 \mathbb{D}_{\text{KL}}(\pi_\theta \| \pi_{\text{orig}})$$
-
-## **3.2. The Preference-Guided Clipped Surrogate Loss ($\mathcal{L}_{\text{pref\_clip}}$)**
-
-The novel component is the `Preference-Guided Clipped Surrogate Loss`. Instead of a simple probability ratio of a single response, we introduce a term that reflects the model's adherence to the learned preferences. We define a "preference ratio" inspired by the DPO formulation.
-
-First, let's define the implicit reward from DPO for a single response $y$ given a prompt $x$ and a reference policy $\pi_{\text{ref}}$:
-
-$$r_{\text{DPO}}(y, x) = \beta \log \frac{\pi_\theta(y|x)}{\pi_{\text{ref}}(y|x)}$$
-
-The DPO loss aims to maximize the difference $r_{\text{DPO}}(y_w, x) - r_{\text{DPO}}(y_l, x)$.
-
-In our PG-GRPO, for each sample $i$ in a batch (which can be a single response from a group in GRPO's setting), we can compute a "preference score" that is analogous to the DPO reward. We then use this to form a new ratio for the clipped surrogate loss.
-
-Let's define a **Preference Ratio**, $p_i(\theta)$, which replaces the original probability ratio $r_i(\theta)$:
-
-$$ p_i(\theta) = \exp \left( \beta \left( \log \frac{\pi_\theta(y_i|x)}{\pi_{\theta_{\text{old}}}(y_i|x)} \right) \right) $$
-
-This formulation is influenced by the DPO's focus on the log-probability ratio. Here, $\pi_{\theta_{old}}$ serves a similar role to $\pi_{\text{ref}}$ in DPO.
-
-The new **Preference-Guided Clipped Surrogate Loss** is then:
-
-$$\mathcal{L}_{\text{pref\_clip}}(\theta) = \frac{1}{N} \sum_{i=1}^{N} \left( \min \left( p_i(\theta) A_i, \text{clip} ( p_i(\theta), 1-\varepsilon, 1+\varepsilon ) A_i \right) \right)$$
-
-where $A_i$ is the advantage calculated using the GRPO methodology (i.e., the reward of response $i$ minus the average reward of the group).
-
-## **3.3. How PG-GRPO Works**
-
-1.  **Group-Based Sampling and Advantage Estimation:** For a given prompt, the current policy $\pi_\theta$ generates a group of responses. An external reward model (or another scoring function) evaluates each response, and the advantage $A_i$ for each response is calculated relative to the group's average reward, as in standard GRPO.
-
-2.  **Preference-Informed Policy Update:** During the optimization step, the policy update is driven by the $\mathcal{L}_{\text{pref\_clip}}$ loss. This loss considers not just the advantage of a response but also the "preference ratio" $p_i(\theta)$.
-
-    *   If a response has a high advantage ($A_i > 0$), the objective will be to increase $p_i(\theta)$, which in turn increases the probability of generating that response under the new policy.
-    *   If a response has a low advantage ($A_i < 0$), the objective will be to decrease $p_i(\theta)$.
-
-3.  **KL Regularization:** The KL penalty term from GRPO is retained to ensure that the policy does not deviate too drastically from the original policy, maintaining training stability.
-
-By integrating a DPO-style ratio into the GRPO framework, PG-GRPO aims to achieve a more direct and potentially more sample-efficient way of learning from preferences, while still benefiting from the stable, on-policy optimization and memory efficiency of GRPO. This hybrid approach allows the model to learn not just from absolute rewards but also from the relative preference between different types of outputs.

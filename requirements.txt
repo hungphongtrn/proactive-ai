@@ -1,5 +1,4 @@
 torch
 datasets
 peft
-trl
 vllm
