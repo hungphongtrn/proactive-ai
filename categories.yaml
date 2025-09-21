@@ -1,0 +1,56 @@
+intents:
+  Small_Talk: Casual conversation without a specific task.
+  Greeting: Initiating a greeting or starting a conversation.
+  Time_Query: Asking about time, date, or schedule.
+  ETA_Request: Asking for the estimated time of completion or delivery.
+  Availability_Check: Asking whether a service/product is available.
+  Geo_Directions: Asking for directions or how to reach a specific location.
+  Info_Request: Requesting specific information that doesn't clearly fall into other groups.
+  Device_Status: Asking about the current status of a device or system.
+  Reset_Device: Requesting a device or system reset.
+  Navigate_Page: Requesting to navigate to a specific page or section in the interface.
+  Reschedule: Requesting to change a scheduled appointment or time.
+  Cancel_Subscription: Requesting to cancel a registered service or subscription.
+  Book_Appointment: Scheduling a new appointment or meeting.
+  Praise: Giving positive feedback about a service, product, or person.
+  Thank: Expressing gratitude or saying thanks.
+  Complaint: Complaining or criticizing an issue, service, or incident.
+  Empathy_Seek: Seeking empathy or emotional support.
+  Bug_Report: Reporting a technical issue, system malfunction, or abnormal behavior.
+  Rate_Service: Giving a quality rating (e.g., stars, satisfaction level).
+  Confirm_Solved: Confirming that a problem has been resolved.
+  Set_Goal: Setting a personal goal or asking the system to remember a goal.
+  Choose_Option: Selecting an option from multiple given choices.
+  Vent_Frustration: Expressing annoyance, stress, or frustration.
+  Self_Disclosure: Sharing personal information, experiences, or feelings.
+
+emotions:
+  Admiration: Finding something impressive or worthy of respect.
+  Amusement: Finding something funny or being entertained.
+  Anger: A strong feeling of displeasure or antagonism.
+  Annoyance: Mild anger, irritation.
+  Approval: Having or expressing a favorable opinion.
+  Caring: Displaying kindness and concern for others.
+  Confusion: Lack of understanding, uncertainty.
+  Curiosity: A strong desire to know or learn something.
+  Desire: A strong feeling of wanting something or wishing for something to happen.
+  Disappointment: Sadness or displeasure caused by the nonfulfillment of one's hopes or expectations.
+  Disapproval: Having or expressing an unfavorable opinion.
+  Disgust: Revulsion or strong disapproval aroused by something unpleasant or offensive.
+  Embarrassment: Self-consciousness, shame, or awkwardness.
+  Excitement: Feeling of great enthusiasm and eagerness.
+  Fear: Being afraid or worried.
+  Gratitude: A feeling of thankfulness and appreciation.
+  Grief: Intense sorrow, especially caused by someone's death.
+  Joy: A feeling of pleasure and happiness.
+  Love: A strong positive emotion of regard and affection.
+  Nervousness: Apprehension, worry, anxiety.
+  Optimism: Hopefulness and confidence about the future or the success of something.
+  Pride: Pleasure or satisfaction due to one's own achievements or those of others.
+  Realization: Becoming aware of something.
+  Relief: Reassurance and relaxation following release from anxiety or distress.
+  Remorse: Regret or guilt.
+  Sadness: Emotional pain, sorrow.
+  Surprise: Feeling astonished, startled by something unexpected.
+  Anxiety: Feeling anxious.
+  Neutral: N/A

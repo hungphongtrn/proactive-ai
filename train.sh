@@ -1,1 +1,1 @@
-CUDA_VISIBLE_DEVICES=0,1 accelerate launch --config_file fsdp2_config.yaml train.py
+CUDA_VISIBLE_DEVICES=0,1 accelerate launch --config_file fsdp_config.yaml train.py

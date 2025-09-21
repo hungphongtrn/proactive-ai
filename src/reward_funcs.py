@@ -5,12 +5,92 @@ from .data_loader import extract_answer
 categories = []
 
 
+def _get_responses(completions):
+    """Helper function to extract responses from completions."""
+    if isinstance(completions[0], str):
+        return completions
+    else:
+        return [completion[0]['content'] for completion in completions]
+
+
+def hamming_loss_reward(prompts, completions, answer, **kwargs) -> List[float]:
+    """
+    Reward function based on Hamming Loss (converted to reward).
+    Hamming Loss = (FP + FN) / Total_Labels
+    Reward = 1 - Hamming Loss
+    """
+    global categories
+    responses = completions
+    extracted_responses = [extract_answer(r) for r in responses]
+
+    rewards = []
+    for extracted, true_answer in zip(extracted_responses, answer):
+        if not extracted or not true_answer:
+            rewards.append(0.0)
+            continue
+
+        # Convert to sets of lowercase categories
+        predicted_cats = set(cat.strip().lower() for cat in extracted.split(","))
+        true_cats = set(cat.strip().lower() for cat in true_answer.split(","))
+
+        # Calculate on all possible categories
+        total_labels = len(categories)
+
+        # False positives and false negatives
+        fp = len(predicted_cats - true_cats)
+        fn = len(true_cats - predicted_cats)
+
+        # Hamming loss
+        hamming_loss = (fp + fn) / total_labels if total_labels > 0 else 1.0
+
+        # Convert to reward (1 - loss)
+        reward = 1.0 - hamming_loss
+        rewards.append(reward)
+
+    return rewards
+
+
+def f1_score_reward(prompts, completions, answer, **kwargs) -> List[float]:
+    """
+    Reward function based on F1-score for multi-label classification.
+    F1 = 2 * (precision * recall) / (precision + recall)
+    """
+    responses = completions
+    extracted_responses = [extract_answer(r) for r in responses]
+
+    rewards = []
+    for extracted, true_answer in zip(extracted_responses, answer):
+        if not extracted or not true_answer:
+            rewards.append(0.0)
+            continue
+
+        # Convert to sets of lowercase categories
+        predicted_cats = set(cat.strip().lower() for cat in extracted.split(","))
+        true_cats = set(cat.strip().lower() for cat in true_answer.split(","))
+
+        # Calculate precision and recall
+        tp = len(predicted_cats.intersection(true_cats))
+
+        precision = tp / len(predicted_cats) if len(predicted_cats) > 0 else 0.0
+        recall = tp / len(true_cats) if len(true_cats) > 0 else 0.0
+
+        # F1-score
+        if precision + recall > 0:
+            f1 = 2 * (precision * recall) / (precision + recall)
+        else:
+            f1 = 0.0
+
+        rewards.append(f1)
+
+    return rewards
+
+
 def multi_label_accuracy_reward(prompts, completions, answer, **kwargs) -> List[float]:
     """
     TODO: Implement proper multi-label accuracy reward function.
     This is a placeholder that should be replaced with a proper implementation.
     """
-    responses = [completion[0]['content'] for completion in completions]
+    responses = _get_responses(completions)
     extracted_responses = [extract_answer(r) for r in responses]
 
     # Simple placeholder: reward if any category matches
@@ -34,7 +114,7 @@ def multi_label_accuracy_reward(prompts, completions, answer, **kwargs) -> List[
 
 def format_reward_func(completions, **kwargs) -> List[float]:
     """Reward function that checks if the response is in comma-separated format."""
-    responses = [completion[0]["content"] for completion in completions]
+    responses = _get_responses(completions)
     extracted_responses = [extract_answer(r) for r in responses]
 
     rewards = []
@@ -61,7 +141,7 @@ def format_reward_func(completions, **kwargs) -> List[float]:
 def category_validity_reward(completions, **kwargs) -> List[float]:
     """Reward function that checks if predicted categories are valid."""
     global categories
-    responses = [completion[0]["content"] for completion in completions]
+    responses = _get_responses(completions)
     extracted_responses = [extract_answer(r) for r in responses]
 
     rewards = []
