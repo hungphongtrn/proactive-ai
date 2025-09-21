@@ -1,59 +1,67 @@
 from datasets import load_dataset, Dataset
-from typing import List, Tuple
+from typing import List, Tuple, Dict
+import yaml
 
 
-def load_and_process_dataset(output_col: str) -> Tuple[Dataset, List[str]]:
-    """Load the dataset and extract unique categories for the specified column."""
-    dataset = load_dataset("richelle05/maxims_50_golden_samples")["train"]
-    all_categories = set()
-    for item in dataset:
-        if item[output_col]:
-            categories_list = [cat.strip().lower() for cat in item[output_col].split(",")]
-            all_categories.update(categories_list)
+class DatasetProcessor:
+    def __init__(self, categories_file: str = 'categories.yaml', prompt_file: str = 'prompt_template.md'):
+        self.categories_file = categories_file
+        self.prompt_file = prompt_file
+        self.categories_data = self._load_categories()
+        self.prompt_template = self._load_prompt_template()
 
-    global_categories = sorted(list(all_categories))
-    print(f"Found {len(global_categories)} unique categories: {global_categories}")
+    def _load_categories(self) -> Dict:
+        with open(self.categories_file, 'r') as f:
+            return yaml.safe_load(f)
 
-    # Create category definitions (placeholder - should be updated with real definitions)
-    category_definitions = "\n".join([f"{cat.upper()}: Definition for {cat}" for cat in global_categories])
+    def _load_prompt_template(self) -> str:
+        with open(self.prompt_file, 'r') as f:
+            return f.read().strip()
 
-    # Create the prompt template. NEED TO UPDATE THIS WITH REAL DEFINITIONS
-    def create_prompt(example):
-        category_list = ", ".join(global_categories)
-        prompt_text = f"""You are a linguistics expert. Given a dialogue between user and agent, classify the speech acts of user into one or more of the following categories:
-{category_list}
+    def _get_categories_for_column(self, output_col: str) -> List[str]:
+        if output_col == 'intent':
+            return list(self.categories_data['intents'].keys())
+        elif output_col == 'emotion':
+            return list(self.categories_data['emotions'].keys())
+        else:
+            raise ValueError(f"Unsupported output_col: {output_col}. Must be 'intent' or 'emotion'")
 
-Use the following definitions to classify the speech acts:
-Label Definition
-{category_definitions}
+    def _format_categories_for_prompt(self) -> Tuple[str, str]:
+        intent_dict = "\n".join([f"- {k}: {v}" for k, v in self.categories_data['intents'].items()])
+        emotion_dict = "\n".join([f"- {k}: {v}" for k, v in self.categories_data['emotions'].items()])
+        return intent_dict, emotion_dict
 
-Note that this is a multi-label classification task. Return the possible labels in a comma-separated string in lowercase (e.g., suggest, offer, promise).
+    def load_and_process_dataset(self, output_col: str) -> Tuple[Dataset, List[str]]:
+        """Load the dataset and extract unique categories for the specified column."""
+        dataset = load_dataset("richelle05/maxims_50_golden_samples")["train"]
 
-User: {example['user1']}"""
+        global_categories = self._get_categories_for_column(output_col)
+        intent_dict, emotion_dict = self._format_categories_for_prompt()
 
-        return {
-            'prompt': [
-                {'role': 'system', 'content': 'You are a helpful assistant that classifies speech acts.'},
-                {'role': 'user', 'content': prompt_text}
-            ],
-            'answer': example[output_col].lower() if example[output_col] else ""
-        }
+        print(f"Found {len(global_categories)} unique categories: {global_categories}")
 
-    # Process the dataset
-    processed_dataset = dataset.map(create_prompt)
+        def create_prompt(example):
+            prompt_text = self.prompt_template.format(
+                intent_dict=intent_dict,
+                emotion_dict=emotion_dict,
+                speech=example['user1']
+            )
 
-    return processed_dataset, global_categories
+            return {
+                'prompt': prompt_text,
+                'answer': example[output_col].lower() if example[output_col] else ""
+            }
+
+        processed_dataset = dataset.map(create_prompt)
+        return processed_dataset, global_categories
 
 
 def extract_answer(text: str) -> str:
     """Extract the answer from the model's response."""
     text = text.strip().lower()
-
-    # Take the last non-empty line
     lines = [line.strip() for line in text.split('\n') if line.strip()]
     if lines:
         return lines[-1]
-
     return text
 
 
@@ -61,10 +69,6 @@ def normalize_categories(text: str, valid_categories: List[str]) -> str:
     """Normalize and validate categories in the response."""
     if not text:
         return ""
-
     predicted_cates = [cate.strip().lower() for cate in text.split(",")]
-
-    # Filter only valid categories
     valid_predicted = [cate for cate in predicted_cates if cate in valid_categories]
-
     return ", ".join(valid_predicted)

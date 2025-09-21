@@ -1,26 +1,22 @@
 import torch
 from trl import GRPOConfig, GRPOTrainer
-from src.data_loader import load_and_process_dataset
-from src.reward_funcs import multi_label_accuracy_reward, format_reward_func, category_validity_reward, set_categories
+from src.data_loader import DatasetProcessor
+from src.reward_funcs import multi_label_accuracy_reward, format_reward_func, category_validity_reward, set_categories, hamming_loss_reward, f1_score_reward
+import yaml
 
-CONFIG = {
-    "model_name": "HuggingFaceTB/SmolLM2-360M-Instruct",
-    "output_col": "intent",  # Can be "intent" or "emotion"
-    "learning_rate": 5e-6,
-    "batch_size": 1,
-    "gradient_accumulation_steps": 8,  # Increase for effective batch size
-    "max_steps": 10,
-    "num_generations": 2,
-    "max_prompt_length": 256,
-    "max_completion_length": 100,
-    "max_seq_length": 356,  # prompt + completion length
-}
 
-def main():
+def main(
+        config_path='train_config.yaml',
+        categories_path='categories.yaml',
+        prompt_path='prompt.md'
+    ):
+    with open(config_path, 'r') as file:
+        train_config = yaml.safe_load(file)
     print("Starting multi-label classification training with GRPO")
 
     # Load dataset
-    dataset, global_categories = load_and_process_dataset(CONFIG["output_col"])
+    data_processor = DatasetProcessor(categories_path, prompt_path)
+    dataset, global_categories = data_processor.load_and_process_dataset(train_config["output_col"])
     set_categories(global_categories)
 
     print(f"Dataset loaded with {len(dataset)} examples")
@@ -29,13 +25,13 @@ def main():
     # Training configuration
     training_args = GRPOConfig(
         output_dir="outputs",
-        learning_rate=CONFIG["learning_rate"],
-        per_device_train_batch_size=CONFIG["batch_size"],
-        gradient_accumulation_steps=CONFIG["gradient_accumulation_steps"],
-        max_steps=CONFIG["max_steps"],
-        num_generations=CONFIG["num_generations"],
-        max_prompt_length=CONFIG["max_prompt_length"],
-        max_completion_length=CONFIG["max_completion_length"],
+        learning_rate=float(train_config["learning_rate"]),
+        per_device_train_batch_size=train_config["batch_size"],
+        gradient_accumulation_steps=train_config["gradient_accumulation_steps"],
+        max_steps=train_config["max_steps"],
+        num_generations=train_config["num_generations"],
+        max_prompt_length=train_config["max_prompt_length"],
+        max_completion_length=train_config["max_completion_length"],
         logging_steps=5,
         save_steps=50,
         max_grad_norm=1.0,
@@ -66,11 +62,13 @@ def main():
 
     # Initialize trainer
     trainer = GRPOTrainer(
-        model=CONFIG["model_name"],
+        model=train_config["model_name"],
         reward_funcs=[
             multi_label_accuracy_reward,
             format_reward_func,
             category_validity_reward,
+            f1_score_reward,
+            hamming_loss_reward
         ],
         args=training_args,
         train_dataset=dataset,
@@ -81,16 +79,13 @@ def main():
     print("Training completed!")
 
     # Save the trained model
-    trainer.save_model(f"grpo_{CONFIG['output_col']}_classification")
-    print(f"Model saved as grpo_{CONFIG['output_col']}_classification")
-
-
-def inference_example():
-    """Example inference function - to be expanded later."""
-    print("Inference functionality to be implemented...")
-    # TODO: Implement inference logic
-    pass
+    trainer.save_model(f"grpo_{train_config['output_col']}_classification")
+    print(f"Model saved as grpo_{train_config['output_col']}_classification")
 
 
 if __name__ == "__main__":
-    main()
+    main(
+        config_path='train_config.yaml',
+        categories_path='/workspace/proactive-ai/categories.yaml',
+        prompt_path='/workspace/proactive-ai/prompt.md'
+    )
