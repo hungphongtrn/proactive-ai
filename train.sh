@@ -1,1 +1,1 @@
-CUDA_VISIBLE_DEVICES=0,1 torchrun --nproc_per_node=2 train.py
+CUDA_VISIBLE_DEVICES=0,1 accelerate launch --config_file fsdp2_config.yaml train.py
