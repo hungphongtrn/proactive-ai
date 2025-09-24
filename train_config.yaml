@@ -1,10 +1,11 @@
-model_name: "HuggingFaceTB/SmolLM2-360M-Instruct"
-output_col: "intent"  # Can be "intent" or "emotion"
+model_name: "Qwen/Qwen3-4B-Instruct-2507"
 learning_rate: 5e-6
-batch_size: 1
-gradient_accumulation_steps: 1  # Increase for effective batch size
-max_steps: 1
-num_generations: 2
-max_prompt_length: 256
-max_completion_length: 100
-max_seq_length: 356
+batch_size: 4
+gradient_accumulation_steps: 8
+max_steps: 500
+num_generations: 4
+max_prompt_length: 1024
+max_completion_length: 324
+max_seq_length: 1348
+logging_steps: 25
+save_steps: 50
