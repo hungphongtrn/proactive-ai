@@ -18,7 +18,6 @@ def _get_responses(completions):
 def parse_structured_response(text: str) -> Dict[str, str]:
     """Parse the structured response with reasoning, intent, emotion, and response tags."""
     result = {
-        'reasoning': '',
         'intent': '',
         'emotion': '',
         'response': ''
@@ -26,7 +25,6 @@ def parse_structured_response(text: str) -> Dict[str, str]:
 
     # Define patterns for each tag
     patterns = {
-        'reasoning': r'<reasoning>\s*(.*?)\s*</reasoning>',
         'intent': r'<intent>\s*(.*?)\s*</intent>',
         'emotion': r'<emotion>\s*(.*?)\s*</emotion>',
         'response': r'<response>\s*(.*?)\s*</response>'
@@ -53,15 +51,16 @@ def format_structure_reward(completions, **kwargs) -> List[float]:
         parsed = parse_structured_response(response)
 
         # Check if all required tags are present and non-empty
-        required_tags = ['reasoning', 'intent', 'emotion', 'response']
+        required_tags = ['intent', 'emotion', 'response']
         score = 0.0
 
         for tag in required_tags:
             if parsed[tag]:
-                score += 0.25  # Each tag worth 0.25, total = 1.0
+                score += 0.33  # Each tag worth 0.25, total = 1.0
 
         rewards.append(score)
 
+    logger.info(f'Format Reward: {rewards}')
     return rewards
 
 
@@ -114,8 +113,7 @@ def hamming_loss_reward(prompts, completions, answer, **kwargs) -> List[float]:
 
     if rewards:
         logger.info(
-            f"Hamming Loss - True: {answer[0]}, Predicted Intent: {parse_structured_response(responses[0])['intent']}, "
-            f"Predicted Emotion: {parse_structured_response(responses[0])['emotion']}, Reward: {rewards[0]}")
+            f"Hamming Loss Reward: {rewards[0]}")
     return rewards
 
 
@@ -173,8 +171,8 @@ def f1_score_reward(prompts, completions, answer, **kwargs) -> List[float]:
 
     if rewards:
         logger.info(
-            f"F1 Score - True: {answer[0]}, Predicted Intent: {parse_structured_response(responses[0])['intent']}, "
-            f"Predicted Emotion: {parse_structured_response(responses[0])['emotion']}, Reward: {rewards[0]}")
+            f"True: {answer[0]}\nPredicted Intent: {parse_structured_response(responses[0])['intent']}, "
+            f"\nPredicted Emotion: {parse_structured_response(responses[0])['emotion']}\nF1 Score Reward: {rewards[0]}")
     return rewards
 
 
@@ -220,9 +218,7 @@ def accuracy_reward(prompts, completions, answer, **kwargs) -> List[float]:
         rewards.append(combined_jaccard)
 
     if rewards:
-        logger.info(
-            f"Sample - True: {answer[0]}, Predicted Intent: {parse_structured_response(responses[0])['intent']}, "
-            f"Predicted Emotion: {parse_structured_response(responses[0])['emotion']}, Reward: {rewards[0]}")
+        logger.info(f"Accuracy Reward: {rewards[0]}")
 
     return rewards
 
@@ -261,7 +257,7 @@ def category_validity_reward(completions, **kwargs) -> List[float]:
         # Average validity of both
         combined_validity = (intent_validity + emotion_validity) / 2.0
         rewards.append(combined_validity)
-
+    logger.info(f"Category Validity Reward: {rewards[0]}")
     return rewards
 
 

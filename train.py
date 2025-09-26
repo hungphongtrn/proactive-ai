@@ -1,7 +1,10 @@
+from unsloth import FastLanguageModel
+from unsloth.chat_templates import get_chat_template
 import torch
 from trl import GRPOConfig, GRPOTrainer
 from src.data_loader import DatasetProcessor
-from src.reward_funcs import format_structure_reward, hamming_loss_reward, f1_score_reward, accuracy_reward, category_validity_reward, set_categories
+from src.reward_funcs import format_structure_reward, hamming_loss_reward, f1_score_reward, accuracy_reward, \
+    category_validity_reward, set_categories
 import yaml
 from loguru import logger
 import wandb
@@ -11,9 +14,12 @@ def main(
         config_path='train_config.yaml',
         categories_path='categories.yaml',
         prompt_path='prompt.md'
-    ):
+):
     with open(config_path, 'r') as file:
-        train_config = yaml.safe_load(file)
+        config = yaml.safe_load(file)
+    model_name = config['model_name']
+    train_config = config['training']
+
     logger.info("Starting multi-label classification training with GRPO")
 
     wandb.init(
@@ -24,61 +30,41 @@ def main(
 
     # Load dataset
     processor = DatasetProcessor(categories_path, prompt_path)
-    train_dataset, test_dataset, intent_categories, emotion_categories = processor.load_and_process_dataset(test_size=0.1)
+    train_dataset, test_dataset, intent_categories, emotion_categories = processor.load_and_process_dataset(
+        test_size=0.1)
     set_categories(intent_categories, emotion_categories)
 
     logger.info(f"Dataset loaded with {len(train_dataset)} + {len(test_dataset)} examples")
     logger.info(f"Intent categories: {intent_categories}")
     logger.info(f"Emotion categories: {emotion_categories}")
 
-    # Training configuration
+    if "model_init_kwargs" in train_config:
+        if "torch_dtype" in train_config["model_init_kwargs"]:
+            dtype_str = train_config["model_init_kwargs"]["torch_dtype"]
+            train_config["model_init_kwargs"]["torch_dtype"] = getattr(torch, dtype_str)
+
+    if "learning_rate" in train_config:
+        train_config["learning_rate"] = float(train_config["learning_rate"])
+
     training_args = GRPOConfig(
-        output_dir="outputs",
-        learning_rate=float(train_config["learning_rate"]),
-        per_device_train_batch_size=train_config["batch_size"],
-        gradient_accumulation_steps=train_config["gradient_accumulation_steps"],
-        max_steps=train_config["max_steps"],
-        num_generations=train_config["num_generations"],
-        max_prompt_length=train_config["max_prompt_length"],
-        max_completion_length=train_config["max_completion_length"],
-        logging_steps=train_config["logging_steps"],
-        save_steps=train_config["save_steps"],
-        max_grad_norm=1.0,
-        # Monitoring
-        report_to="wandb",
-        run_name=f"proactive_grpo_classification",
-        # Model loading args
-        model_init_kwargs={
-            "torch_dtype": torch.bfloat16,
-        },
-        # Mixed precision
-        bf16=True,
-        gradient_checkpointing=False,  # Disable - use FSDP activation checkpointing instead
-        # Additional GRPO settings
-        adam_beta1=0.9,
-        adam_beta2=0.99,
-        weight_decay=0.01,
-        warmup_ratio=0.05,
-        lr_scheduler_type="cosine",
-        optim="adamw_torch",
+        **train_config
+    )
 
-        # Data loading
-        dataloader_num_workers=4,
-        dataloader_pin_memory=True,
-
-        # Checkpointing
-        save_total_limit=3,
-        load_best_model_at_end=False,
+    model, tokenizer = FastLanguageModel.from_pretrained(
+        model_name=model_name,
+        max_seq_length=config['max_seq_length'],
+        load_in_4bit=False,
+        full_finetuning=True
     )
 
     # Initialize trainer
     trainer = GRPOTrainer(
-        model=train_config["model_name"],
+        model=model,
         reward_funcs=[
+            f1_score_reward,
             accuracy_reward,
             format_structure_reward,
             category_validity_reward,
-            f1_score_reward,
             hamming_loss_reward
         ],
         args=training_args,

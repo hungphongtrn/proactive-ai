@@ -1,0 +1,21 @@
+[project]
+name = "proactive-ai"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "datasets>=3.6.0",
+    "ipdb>=0.13.13",
+    "loguru>=0.7.3",
+    "peft>=0.17.1",
+    "torch>=2.8.0",
+    "trl>=0.19.1",
+    "unsloth",
+    "unsloth-zoo",
+    "vllm>=0.10.2",
+]
+
+[tool.uv.sources]
+unsloth = { git = "https://github.com/unslothai/unsloth.git" }
+unsloth-zoo = { git = "https://github.com/unslothai/unsloth-zoo.git" }
