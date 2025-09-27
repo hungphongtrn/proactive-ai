@@ -23,10 +23,5 @@ This is the list of emotion keywords you can use to describe the emotion of the 
 <response> ... </response>'
 - We will use the regex to extract tags from your response so if you include the tags in the thinking there will be error.
 <output_format>
-
-This is the user speech: 
-<speech>
-{speech}
-</speech>
 """
 

@@ -38,3 +38,15 @@ training:
   # Checkpointing
   save_total_limit: 3
   load_best_model_at_end: False
+
+reward_functions:
+  - name: "f1_score_reward"
+    enabled: true
+  - name: "accuracy_reward"
+    enabled: true
+  - name: "format_structure_reward"
+    enabled: true
+  - name: "category_validity_reward"
+    enabled: false
+  - name: "hamming_loss_reward"
+    enabled: true

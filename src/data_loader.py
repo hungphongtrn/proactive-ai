@@ -5,11 +5,12 @@ from loguru import logger
 
 
 class DatasetProcessor:
-    def __init__(self, categories_path: str = 'categories.yaml', prompt_path: str = 'prompt_template.md'):
+    def __init__(self, categories_path: str = 'categories.yaml', prompt_path: str = 'prompt_template.md', tokenizer = None):
         self.categories_file = categories_path
         self.prompt_file = prompt_path
         self.categories_data = self._load_categories()
         self.prompt_template = self._load_prompt_template()
+        self.tokenizer = tokenizer
 
     def _load_categories(self) -> Dict:
         with open(self.categories_file, 'r') as f:
@@ -36,11 +37,23 @@ class DatasetProcessor:
         logger.info(f"Found {len(emotion_categories)} emotion categories: {emotion_categories}")
 
         def create_prompt(example):
-            prompt_text = self.prompt_template.format(
-                intent_dict=intent_dict,
-                emotion_dict=emotion_dict,
-                speech=example['user1']
-            )
+            if self.tokenizer:
+                system_prompt = self.prompt_template.format(
+                                        intent_dict=intent_dict,
+                                        emotion_dict=emotion_dict,
+                                        speech=example['user1']
+                                    )
+                messages = [
+                    {'role': 'system', 'content': system_prompt},
+                    {'role': 'user', 'content': example['user1']},
+                ]
+                prompt_text = self.tokenizer.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
+            else:
+                prompt_text = self.prompt_template.format(
+                    intent_dict=intent_dict,
+                    emotion_dict=emotion_dict,
+                ) + f"This is the user speech\n<speech>\n{example['user1']}\n</speech>"
+
 
             # Combine intent and emotion as "intent_str|emotion_str"
             intent_str = example['intent'].lower() if example['intent'] else ""

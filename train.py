@@ -10,6 +10,14 @@ from loguru import logger
 import wandb
 
 
+REWARD_FUNCTION_REGISTRY = {
+    "f1_score_reward": f1_score_reward,
+    "accuracy_reward": accuracy_reward,
+    "format_structure_reward": format_structure_reward,
+    "category_validity_reward": category_validity_reward,
+    "hamming_loss_reward": hamming_loss_reward
+}
+
 def main(
         config_path='train_config.yaml',
         categories_path='categories.yaml',
@@ -19,17 +27,28 @@ def main(
         config = yaml.safe_load(file)
     model_name = config['model_name']
     train_config = config['training']
+    reward_config = config['reward_funcs']
 
     logger.info("Starting multi-label classification training with GRPO")
 
     wandb.init(
+        entity="lenhobach1",
         project="grpo-classification",
-        name=f"proactive_grpo_classification"
+        name=f"proactive_grpo_classification",
+        config=config,
     )
     logger.info(f"W&B dashboard: {wandb.run.url}")
 
+    # Load model and tokenizer
+    model, tokenizer = FastLanguageModel.from_pretrained(
+        model_name=model_name,
+        max_seq_length=config['max_seq_length'],
+        load_in_4bit=False,
+        full_finetuning=True
+    )
+
     # Load dataset
-    processor = DatasetProcessor(categories_path, prompt_path)
+    processor = DatasetProcessor(categories_path, prompt_path, tokenizer)
     train_dataset, test_dataset, intent_categories, emotion_categories = processor.load_and_process_dataset(
         test_size=0.1)
     set_categories(intent_categories, emotion_categories)
@@ -50,23 +69,16 @@ def main(
         **train_config
     )
 
-    model, tokenizer = FastLanguageModel.from_pretrained(
-        model_name=model_name,
-        max_seq_length=config['max_seq_length'],
-        load_in_4bit=False,
-        full_finetuning=True
-    )
+    enabled_rewards = []
+    for rf_config in reward_config:
+        if rf_config['enabled']:
+            func = REWARD_FUNCTION_REGISTRY[rf_config['name']]
+            enabled_rewards.append(func)
 
     # Initialize trainer
     trainer = GRPOTrainer(
         model=model,
-        reward_funcs=[
-            f1_score_reward,
-            accuracy_reward,
-            format_structure_reward,
-            category_validity_reward,
-            hamming_loss_reward
-        ],
+        reward_funcs=enabled_rewards,
         args=training_args,
         train_dataset=train_dataset,
         eval_dataset=test_dataset
