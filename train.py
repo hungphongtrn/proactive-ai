@@ -1,7 +1,6 @@
-from unsloth import FastLanguageModel
-from unsloth.chat_templates import get_chat_template
 import torch
 from trl import GRPOConfig, GRPOTrainer
+from transformers import AutoTokenizer
 from src.data_loader import DatasetProcessor
 from src.reward_funcs import format_structure_reward, hamming_loss_reward, f1_score_reward, accuracy_reward, \
     category_validity_reward, set_categories
@@ -31,21 +30,17 @@ def main(
 
     logger.info("Starting multi-label classification training with GRPO")
 
-    wandb.init(
-        entity="lenhobach1",
-        project="grpo-classification",
-        name=f"proactive_grpo_classification",
-        config=config,
-    )
-    logger.info(f"W&B dashboard: {wandb.run.url}")
+    # wandb.init(
+    #     entity="lenhobach1",
+    #     project="grpo-classification",
+    #     name=f"proactive_grpo_classification",
+    #     config=config,
+    # )
+    # logger.info(f"W&B dashboard: {wandb.run.url}")
 
     # Load model and tokenizer
-    model, tokenizer = FastLanguageModel.from_pretrained(
-        model_name=model_name,
-        max_seq_length=config['max_seq_length'],
-        load_in_4bit=False,
-        full_finetuning=True
-    )
+    model = model_name
+    tokenizer = AutoTokenizer.from_pretrained(model_name)
 
     # Load dataset
     processor = DatasetProcessor(categories_path, prompt_path, tokenizer)
