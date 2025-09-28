@@ -12,14 +12,12 @@ This is the list of emotion keywords you can use to describe the emotion of the 
 </emotion_list>
 
 <output_format>
-- You should try to think and analyze deeply about the speech. Then give me the intent and emotion of the person in the conversation. Finally, give me a response that shows you understand the context. 
-- For intent and emotion, list all keywords that fit the context, separated by commas. The keywords MUST be in the predefined lists above. NEVER invent a new keyword even it is suitable. 
-- The output should be in the following format:
-"<intent> ... </intent>
-<emotion> ... </emotion>
-<response> ... </response>"
-<output_format>
-
+- You should try to think and analyze deeply about the speech. Then give me the intent and emotion of the person in the conversation. Finally, give me a response that shows you understand the context.
+- For each thinking step (for emotion, intent and response) you can only have maximum 3 sentences.
+- For intent and emotion, list all keywords that fit the context, separated by commas. The keywords MUST be in the predefined lists above. NEVER invent a new keyword even it is suitable.
+- Your response should be in the following format:
+'<think>...</think>
+<intent> ... </intent>
 This is the user speech: 
 <speech>
 {speech}
