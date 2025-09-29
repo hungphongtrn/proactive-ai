@@ -41,7 +41,6 @@ class DatasetProcessor:
                 system_prompt = self.prompt_template.format(
                                         intent_dict=intent_dict,
                                         emotion_dict=emotion_dict,
-                                        speech=example['user1']
                                     )
                 messages = [
                     {'role': 'system', 'content': system_prompt},
