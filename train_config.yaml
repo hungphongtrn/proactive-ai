@@ -56,6 +56,6 @@ reward_funcs:
   - name: "category_validity_reward"
     enabled: true
   - name: "hamming_loss_reward"
-    enabled: true
+    enabled: false
   - name: "squared_match_reward"
     enabled: true
