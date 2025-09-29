@@ -17,6 +17,11 @@ def _get_responses(completions):
 
 def parse_structured_response(text: str) -> Dict[str, str]:
     """Parse the structured response with reasoning, intent, emotion, and response tags."""
+
+    # Only extract the result after </think>
+    if "</think>" in text:
+        text = text.split("</think>")[-1]
+
     result = {
         'intent': '',
         'emotion': '',
@@ -258,6 +263,54 @@ def category_validity_reward(completions, **kwargs) -> List[float]:
         combined_validity = (intent_validity + emotion_validity) / 2.0
         rewards.append(combined_validity)
     logger.info(f"Category Validity Reward: {rewards[0]}")
+    return rewards
+
+
+def squared_match_reward(prompts, completions, answer, **kwargs) -> List[float]:
+    """
+    Reward function where correct matches are squared.
+    Getting 2 correct gives 4x the reward of 1 correct (not 2x).
+    """
+    responses = _get_responses(completions)
+
+    rewards = []
+    for response, true_answer in zip(responses, answer):
+        parsed = parse_structured_response(response)
+
+        if not parsed['intent'] or not parsed['emotion']:
+            rewards.append(0.0)
+            continue
+
+        # Parse true answer
+        try:
+            true_intent_str, true_emotion_str = true_answer.split('|')
+        except ValueError:
+            rewards.append(0.0)
+            continue
+
+        # Calculate squared match reward for intent
+        predicted_intents = set(cat.strip().lower() for cat in parsed['intent'].split(","))
+        true_intents = set(cat.strip().lower() for cat in true_intent_str.split(","))
+
+        correct_intent = len(predicted_intents.intersection(true_intents))
+        total_intent = len(true_intents)
+        reward_intent = (correct_intent ** 2) / (total_intent ** 2) if total_intent > 0 else 0.0
+
+        # Calculate squared match reward for emotion
+        predicted_emotions = set(cat.strip().lower() for cat in parsed['emotion'].split(","))
+        true_emotions = set(cat.strip().lower() for cat in true_emotion_str.split(","))
+
+        correct_emotion = len(predicted_emotions.intersection(true_emotions))
+        total_emotion = len(true_emotions)
+        reward_emotion = (correct_emotion ** 2) / (total_emotion ** 2) if total_emotion > 0 else 0.0
+
+        # Average of both rewards
+        combined_reward = (reward_intent + reward_emotion) / 2.0
+        rewards.append(combined_reward)
+
+    if rewards:
+        logger.info(f"Squared Match Reward: {rewards[0]}")
+
     return rewards
 
 

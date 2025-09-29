@@ -3,7 +3,7 @@ from trl import GRPOConfig, GRPOTrainer
 from transformers import AutoTokenizer
 from src.data_loader import DatasetProcessor
 from src.reward_funcs import format_structure_reward, hamming_loss_reward, f1_score_reward, accuracy_reward, \
-    category_validity_reward, set_categories
+    category_validity_reward, set_categories, squared_match_reward
 import yaml
 from loguru import logger
 import wandb
@@ -14,7 +14,8 @@ REWARD_FUNCTION_REGISTRY = {
     "accuracy_reward": accuracy_reward,
     "format_structure_reward": format_structure_reward,
     "category_validity_reward": category_validity_reward,
-    "hamming_loss_reward": hamming_loss_reward
+    "hamming_loss_reward": hamming_loss_reward,
+    "squared_match_reward": squared_match_reward
 }
 
 def main(
