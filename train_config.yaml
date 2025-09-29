@@ -52,8 +52,10 @@ reward_funcs:
   - name: "accuracy_reward"
     enabled: true
   - name: "format_structure_reward"
-    enabled: true
-  - name: "category_validity_reward"
     enabled: false
+  - name: "category_validity_reward"
+    enabled: true
   - name: "hamming_loss_reward"
+    enabled: true
+  - name: "squared_match_reward"
     enabled: true
