@@ -25,8 +25,3 @@ Example:
 <intent>self-disclosure, complaint </intent>
 <emotion>frustration, disappointment </emotion>
 <response>I hear how tough that was, it makes sense you feel drained.</response>
-
-This is the user speech:
-<speech>
-{speech}
-</speech>
