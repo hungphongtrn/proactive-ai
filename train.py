@@ -2,11 +2,17 @@ import torch
 from trl import GRPOConfig, GRPOTrainer
 from transformers import AutoTokenizer
 from src.data_loader import DatasetProcessor
-from src.reward_funcs import format_structure_reward, hamming_loss_reward, f1_score_reward, accuracy_reward, \
-    category_validity_reward, set_categories, squared_match_reward
+from src.reward_funcs import (
+    format_structure_reward,
+    hamming_loss_reward,
+    f1_score_reward,
+    accuracy_reward,
+    category_validity_reward,
+    set_categories,
+    squared_match_reward,
+)
 import yaml
 from loguru import logger
-import wandb
 
 
 REWARD_FUNCTION_REGISTRY = {
@@ -15,29 +21,22 @@ REWARD_FUNCTION_REGISTRY = {
     "format_structure_reward": format_structure_reward,
     "category_validity_reward": category_validity_reward,
     "hamming_loss_reward": hamming_loss_reward,
-    "squared_match_reward": squared_match_reward
+    "squared_match_reward": squared_match_reward,
 }
 
+
 def main(
-        config_path='train_config.yaml',
-        categories_path='categories.yaml',
-        prompt_path='prompt.md'
+    config_path="train_config.yaml",
+    categories_path="categories.yaml",
+    prompt_path="prompt.md",
 ):
-    with open(config_path, 'r') as file:
+    with open(config_path, "r") as file:
         config = yaml.safe_load(file)
-    model_name = config['model_name']
-    train_config = config['training']
-    reward_config = config['reward_funcs']
+    model_name = config["model_name"]
+    train_config = config["training"]
+    reward_config = config["reward_funcs"]
 
     logger.info("Starting multi-label classification training with GRPO")
-
-    # wandb.init(
-    #     entity="lenhobach1",
-    #     project="grpo-classification",
-    #     name=f"proactive_grpo_classification",
-    #     config=config,
-    # )
-    # logger.info(f"W&B dashboard: {wandb.run.url}")
 
     # Load model and tokenizer
     model = model_name
@@ -45,11 +44,14 @@ def main(
 
     # Load dataset
     processor = DatasetProcessor(categories_path, prompt_path, tokenizer)
-    train_dataset, test_dataset, intent_categories, emotion_categories = processor.load_and_process_dataset(
-        test_size=0.1)
+    train_dataset, test_dataset, intent_categories, emotion_categories = (
+        processor.load_and_process_dataset(test_size=0.1)
+    )
     set_categories(intent_categories, emotion_categories)
 
-    logger.info(f"Dataset loaded with {len(train_dataset)} + {len(test_dataset)} examples")
+    logger.info(
+        f"Dataset loaded with {len(train_dataset)} + {len(test_dataset)} examples"
+    )
     logger.info(f"Intent categories: {intent_categories}")
     logger.info(f"Emotion categories: {emotion_categories}")
 
@@ -61,14 +63,12 @@ def main(
     if "learning_rate" in train_config:
         train_config["learning_rate"] = float(train_config["learning_rate"])
 
-    training_args = GRPOConfig(
-        **train_config
-    )
+    training_args = GRPOConfig(**train_config)
 
     enabled_rewards = []
     for rf_config in reward_config:
-        if rf_config['enabled']:
-            func = REWARD_FUNCTION_REGISTRY[rf_config['name']]
+        if rf_config["enabled"]:
+            func = REWARD_FUNCTION_REGISTRY[rf_config["name"]]
             enabled_rewards.append(func)
 
     # Initialize trainer
@@ -77,7 +77,7 @@ def main(
         reward_funcs=enabled_rewards,
         args=training_args,
         train_dataset=train_dataset,
-        eval_dataset=test_dataset
+        eval_dataset=test_dataset,
     )
 
     logger.info("Starting training...")
@@ -85,13 +85,15 @@ def main(
     logger.info("Training completed!")
 
     # Save the trained model
-    trainer.save_model(f"proactive_grpo_classification")
-    logger.info(f"Model saved as proactive_grpo_classification")
+    if trainer.is_fsdp_enabled:
+        trainer.accelerator.state.fsdp_plugin.set_state_dict_type("FULL_STATE_DICT")
+
+    trainer.save_model(train_config["output_dir"])
 
 
 if __name__ == "__main__":
     main(
-        config_path='train_config.yaml',
-        categories_path='/workspace/proactive-ai/categories.yaml',
-        prompt_path='/workspace/proactive-ai/prompt.md'
+        config_path="train_config.yaml",
+        categories_path="/workspace/proactive-ai/categories.yaml",
+        prompt_path="/workspace/proactive-ai/prompt.md",
     )
