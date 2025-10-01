@@ -7,7 +7,7 @@ training:
   per_device_train_batch_size: 1
   gradient_accumulation_steps: 8
 
-  num_train_epochs: 1
+  num_train_epochs: 3
   num_generations: 4
   max_prompt_length: 1024
   max_completion_length: 1024
@@ -25,20 +25,22 @@ training:
   gradient_checkpointing: False # Disable - use FSDP activation checkpointing instead
 
   # Optimizer
-  optim: "adamw_torch"
+  optim: "adamw_8bit"
   adam_beta1: 0.9
   adam_beta2: 0.99
   weight_decay: 0.01
   warmup_ratio: 0.05
   lr_scheduler_type: "cosine"
 
+  loss_type: "dr_grpo"
+
   # Data loading
   dataloader_num_workers: 4
   dataloader_pin_memory: True
 
   # Checkpointing
-  save_total_limit: 3
-  load_best_model_at_end: False
+  save_total_limit: 10
+  load_best_model_at_end: True
 
   # vLLLM
   use_vllm: True
