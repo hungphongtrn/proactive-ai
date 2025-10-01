@@ -1,6 +1,7 @@
 from typing import List, Dict
 from loguru import logger
 import re
+import wandb
 
 # Global variables to store categories - will be set from main training script
 intent_categories = []
@@ -175,9 +176,15 @@ def f1_score_reward(prompts, completions, answer, **kwargs) -> List[float]:
         rewards.append(combined_f1)
 
     if rewards:
-        logger.info(
-            f"True: {answer[0]}\nPredicted Intent: {parse_structured_response(responses[0])['intent']}, "
-            f"\nPredicted Emotion: {parse_structured_response(responses[0])['emotion']}\nF1 Score Reward: {rewards[0]}")
+        logger.info
+        logger.info(f"Groundtruth: {answer[0]}")
+        logger.info(f"Prediction: {responses[0]}")
+        logger.info(f"F1 Score Reward: {rewards[0]}")
+        if wandb.run:
+            wandb.log({
+                "groundtruth": answer[0],
+                "prediction": responses[0],
+            })
     return rewards
 
 
