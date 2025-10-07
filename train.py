@@ -8,8 +8,9 @@ from src.reward_funcs import (
     f1_score_reward,
     accuracy_reward,
     category_validity_reward,
-    set_categories,
+    set_global_params,
     squared_match_reward,
+    thinking_efficiency_reward
 )
 import yaml
 from loguru import logger
@@ -22,6 +23,7 @@ REWARD_FUNCTION_REGISTRY = {
     "category_validity_reward": category_validity_reward,
     "hamming_loss_reward": hamming_loss_reward,
     "squared_match_reward": squared_match_reward,
+    "thinking_efficiency_reward": thinking_efficiency_reward
 }
 
 
@@ -47,7 +49,9 @@ def main(
     train_dataset, test_dataset, intent_categories, emotion_categories = (
         processor.load_and_process_dataset(test_size=0.1)
     )
-    set_categories(intent_categories, emotion_categories)
+
+    max_completion_length = train_config.get("max_completion_length", 1024)
+    set_global_params(intent_categories, emotion_categories, max_completion_length)
 
     logger.info(
         f"Dataset loaded with {len(train_dataset)} + {len(test_dataset)} examples"
