@@ -6,6 +6,7 @@ import wandb
 # Global variables to store categories - will be set from main training script
 intent_categories = []
 emotion_categories = []
+max_new_tokens = 1024
 
 
 def _get_responses(completions):
@@ -221,52 +222,13 @@ def accuracy_reward(prompts, completions, answer, **kwargs) -> List[float]:
     """
     responses = _get_responses(completions)
 
-    rewards = []
-    for response, true_answer in zip(responses, answer):
-        parsed = parse_structured_response(response)
-
-        if not parsed["intent"] or not parsed["emotion"]:
-            rewards.append(0.0)
-            continue
-
-        # Parse true answer
-        try:
-            true_intent_str, true_emotion_str = true_answer.split("|")
-        except ValueError:
-            rewards.append(0.0)
-            continue
-
-        # Calculate Jaccard for intent
-        predicted_intents = set(
-            cat.strip().lower() for cat in parsed["intent"].split(",")
-        )
-        true_intents = set(cat.strip().lower() for cat in true_intent_str.split(","))
-
-        intersection_intent = len(predicted_intents.intersection(true_intents))
-        union_intent = len(predicted_intents.union(true_intents))
-        jaccard_intent = intersection_intent / union_intent if union_intent > 0 else 0.0
-
-        # Calculate Jaccard for emotion
-        predicted_emotions = set(
-            cat.strip().lower() for cat in parsed["emotion"].split(",")
-        )
-        true_emotions = set(cat.strip().lower() for cat in true_emotion_str.split(","))
-
-        intersection_emotion = len(predicted_emotions.intersection(true_emotions))
-        union_emotion = len(predicted_emotions.union(true_emotions))
-        jaccard_emotion = (
-            intersection_emotion / union_emotion if union_emotion > 0 else 0.0
-        )
-
-        # Average of both Jaccard scores
-        combined_jaccard = (jaccard_intent + jaccard_emotion) / 2.0
-        rewards.append(combined_jaccard)
+    rewards = [_calculate_jaccard_score(response, true_answer)
+               for response, true_answer in zip(responses, answer)]
 
     if rewards:
         logger.info(f"Accuracy Reward: {rewards[0]}")
 
     return rewards
-
 
 def category_validity_reward(completions, **kwargs) -> List[float]:
     """Reward function that checks if predicted categories are valid for both intent and emotion."""
@@ -374,8 +336,72 @@ def squared_match_reward(prompts, completions, answer, **kwargs) -> List[float]:
     return rewards
 
 
-def set_categories(intent_cats: List[str], emotion_cats: List[str]):
+def _calculate_jaccard_score(response: str, true_answer: str) -> float:
+    """Helper function to calculate Jaccard score for intent and emotion."""
+    parsed = parse_structured_response(response)
+
+    if not parsed["intent"] or not parsed["emotion"]:
+        return 0.0
+
+    try:
+        true_intent_str, true_emotion_str = true_answer.split("|")
+    except ValueError:
+        return 0.0
+
+    # Calculate Jaccard for intent
+    predicted_intents = set(cat.strip().lower() for cat in parsed["intent"].split(","))
+    true_intents = set(cat.strip().lower() for cat in true_intent_str.split(","))
+
+    intersection_intent = len(predicted_intents.intersection(true_intents))
+    union_intent = len(predicted_intents.union(true_intents))
+    jaccard_intent = intersection_intent / union_intent if union_intent > 0 else 0.0
+
+    # Calculate Jaccard for emotion
+    predicted_emotions = set(cat.strip().lower() for cat in parsed["emotion"].split(","))
+    true_emotions = set(cat.strip().lower() for cat in true_emotion_str.split(","))
+
+    intersection_emotion = len(predicted_emotions.intersection(true_emotions))
+    union_emotion = len(predicted_emotions.union(true_emotions))
+    jaccard_emotion = intersection_emotion / union_emotion if union_emotion > 0 else 0.0
+
+    return (jaccard_intent + jaccard_emotion) / 2.0
+
+
+def thinking_efficiency_reward(prompts, completions, answer, **kwargs) -> List[float]:
+    """
+    Reward: short thinking when correct, long thinking when incorrect.
+    """
+    responses = _get_responses(completions)
+
+    rewards = []
+    for response, true_answer in zip(responses, answer):
+        # Extract thinking length
+        thinking_length = 0
+        if "<think>" in response and "</think>" in response:
+            thinking_text = response.split("<think>")[1].split("</think>")[0]
+            thinking_length = len(thinking_text.split())
+
+        thinking_ratio = min(thinking_length / max_new_tokens, 1.0)
+
+        # Reuse Jaccard calculation
+        accuracy = _calculate_jaccard_score(response, true_answer)
+
+        # High accuracy + short thinking = high reward
+        # Low accuracy + long thinking = high reward
+        reward = accuracy * (1 - thinking_ratio) + (1 - accuracy) * thinking_ratio
+
+        rewards.append(reward)
+
+    if rewards:
+        logger.info(f"Thinking Efficiency Reward: {rewards[0]}")
+
+    return rewards
+
+
+def set_global_params(intent_cats: List[str], emotion_cats: List[str], max_tokens: int = 1024):
     """Set the global categories lists for use in reward functions."""
-    global intent_categories, emotion_categories
+    global intent_categories, emotion_categories, max_new_tokens
     intent_categories = [cat.lower() for cat in intent_cats]
     emotion_categories = [cat.lower() for cat in emotion_cats]
+    max_new_tokens = max_tokens
+
