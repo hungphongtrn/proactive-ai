@@ -51,7 +51,7 @@ def main(
     )
 
     max_completion_length = train_config.get("max_completion_length", 1024)
-    set_global_params(intent_categories, emotion_categories, max_completion_length)
+    set_global_params(intent_categories, emotion_categories, config)
 
     logger.info(
         f"Dataset loaded with {len(train_dataset)} + {len(test_dataset)} examples"
@@ -70,9 +70,9 @@ def main(
     training_args = GRPOConfig(**train_config)
 
     enabled_rewards = []
-    for rf_config in reward_config:
-        if rf_config["enabled"]:
-            func = REWARD_FUNCTION_REGISTRY[rf_config["name"]]
+    for rw_name in reward_config.keys():
+        if reward_config[rw_name]['enabled']:
+            func = REWARD_FUNCTION_REGISTRY[rw_name]
             enabled_rewards.append(func)
 
     # Initialize trainer

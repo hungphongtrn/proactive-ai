@@ -2,11 +2,12 @@ from typing import List, Dict
 from loguru import logger
 import re
 import wandb
+from llm_eval.client import query_hosted_model
 
 # Global variables to store categories - will be set from main training script
 intent_categories = []
 emotion_categories = []
-max_new_tokens = 1024
+CONFIG = {}
 
 
 def _get_responses(completions):
@@ -59,7 +60,12 @@ def format_structure_reward(completions, **kwargs) -> List[float]:
 
         for tag in required_tags:
             if parsed[tag]:
-                score += 0.33  # Each tag worth 0.25, total = 1.0
+                if tag == "response":
+                    # Only give score if response ends with </response>
+                    if response.strip().endswith("</response>"):
+                        score += 0.33
+                else:
+                    score += 0.33
 
         rewards.append(score)
 
@@ -372,6 +378,7 @@ def thinking_efficiency_reward(prompts, completions, answer, **kwargs) -> List[f
     Reward: short thinking when correct, long thinking when incorrect.
     """
     responses = _get_responses(completions)
+    max_new_tokens = CONFIG.get("training", {}).get("max_completion_length", 1024)
 
     rewards = []
     for response, true_answer in zip(responses, answer):
@@ -398,10 +405,64 @@ def thinking_efficiency_reward(prompts, completions, answer, **kwargs) -> List[f
     return rewards
 
 
-def set_global_params(intent_cats: List[str], emotion_cats: List[str], max_tokens: int = 1024):
+def llm_judge_response_reward(prompts, completions, answer, **kwargs) -> List[float]:
+    """
+    Reward function using LLM-as-a-judge to evaluate response quality.
+    Evaluates if the response appropriately addresses the intent and emotion.
+    """
+    responses = _get_responses(completions)
+    judge_server_url = CONFIG.get("judge_server_url", "")
+
+    rewards = []
+    for prompt, response, true_answer in zip(prompts, responses, answer):
+        parsed = parse_structured_response(response)
+
+        if not parsed["response"]:
+            rewards.append(0.0)
+            continue
+
+        # Parse true answer to get intent and emotion
+        try:
+            true_intent_str, true_emotion_str = true_answer.split("|")
+        except ValueError:
+            rewards.append(0.0)
+            continue
+
+        # Extract user's speech from prompt
+        user_speech = prompt.split("User:")[-1].strip() if "User:" in prompt else prompt
+
+        # Query LLM judge
+        try:
+            judge_response = query_hosted_model(
+                user_speech=user_speech,
+                intent=true_intent_str,
+                emotion=true_emotion_str,
+                response=parsed["response"],
+                server_url=judge_server_url
+            )
+
+            # Extract score using regex
+            score_match = re.search(r"<score>\s*(0\.0|0\.5|1\.0)\s*</score>", judge_response)
+            if score_match:
+                score = float(score_match.group(1))
+                rewards.append(score)
+            else:
+                logger.warning(f"Could not parse score from judge response: {judge_response}")
+                rewards.append(0.0)
+        except Exception as e:
+            logger.error(f"Error calling LLM judge: {e}")
+            rewards.append(0.0)
+
+    if rewards:
+        logger.info(f"LLM Judge Response Reward: {rewards[0]}")
+
+    return rewards
+
+
+def set_global_params(intent_cats: List[str], emotion_cats: List[str], config: list):
     """Set the global categories lists for use in reward functions."""
-    global intent_categories, emotion_categories, max_new_tokens
+    global intent_categories, emotion_categories, CONFIG
     intent_categories = [cat.lower() for cat in intent_cats]
     emotion_categories = [cat.lower() for cat in emotion_cats]
-    max_new_tokens = max_tokens
+    CONFIG = config
 
