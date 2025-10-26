@@ -3,29 +3,33 @@ from trl import GRPOConfig, GRPOTrainer
 from transformers import AutoTokenizer
 from src.data_loader import DatasetProcessor
 from src.reward_funcs import (
+    f1_score_intent_reward,
+    f1_score_emotion_reward,
+    accuracy_intent_reward,
+    accuracy_emotion_reward,
     format_structure_reward,
-    hamming_loss_reward,
-    f1_score_reward,
-    accuracy_reward,
-    category_validity_reward,
-    set_global_params,
-    squared_match_reward,
-    thinking_efficiency_reward
+    category_validity_intent_reward,
+    category_validity_emotion_reward,
+    squared_match_intent_reward,
+    squared_match_emotion_reward,
+    thinking_efficiency_reward,
 )
 import yaml
 from loguru import logger
 
 
 REWARD_FUNCTION_REGISTRY = {
-    "f1_score_reward": f1_score_reward,
-    "accuracy_reward": accuracy_reward,
+    "f1_score_intent_reward": f1_score_intent_reward,
+    "f1_score_emotion_reward": f1_score_emotion_reward,
+    "accuracy_intent_reward": accuracy_intent_reward,
+    "accuracy_emotion_reward": accuracy_emotion_reward,
     "format_structure_reward": format_structure_reward,
-    "category_validity_reward": category_validity_reward,
-    "hamming_loss_reward": hamming_loss_reward,
-    "squared_match_reward": squared_match_reward,
-    "thinking_efficiency_reward": thinking_efficiency_reward
+    "category_validity_intent_reward": category_validity_intent_reward,
+    "category_validity_emotion_reward": category_validity_emotion_reward,
+    "squared_match_intent_reward": squared_match_intent_reward,
+    "squared_match_emotion_reward": squared_match_emotion_reward,
+    "thinking_efficiency_reward": thinking_efficiency_reward,
 }
-
 
 def main(
     config_path="train_config.yaml",
