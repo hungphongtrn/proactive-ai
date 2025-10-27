@@ -59,7 +59,7 @@ def format_structure_reward(completions, **kwargs) -> List[float]:
 
         for tag in required_tags:
             if parsed[tag]:
-                score += 0.33  # Each tag worth 0.25, total = 1.0
+                score += 0.33  # Each tag worth 0.33, total ~= 1.0
 
         rewards.append(score)
 
@@ -67,88 +67,21 @@ def format_structure_reward(completions, **kwargs) -> List[float]:
     return rewards
 
 
-def hamming_loss_reward(prompts, completions, answer, **kwargs) -> List[float]:
-    """
-    Reward function based on Hamming Loss for both intent and emotion.
-    Returns combined reward for both predictions.
-    """
-    global intent_categories, emotion_categories
+def f1_score_intent_reward(prompts, completions, answer, **kwargs) -> List[float]:
+    """Reward function based on F1-score for intent only."""
     responses = _get_responses(completions)
 
     rewards = []
     for response, true_answer in zip(responses, answer):
         parsed = parse_structured_response(response)
 
-        if not parsed["intent"] or not parsed["emotion"]:
-            rewards.append(0.0)
-            continue
-
-        # Parse true answer (expecting format: "intent1,intent2|emotion1,emotion2")
-        try:
-            true_intent_str, true_emotion_str = true_answer.split("|")
-        except ValueError:
-            rewards.append(0.0)
-            continue
-
-        # Calculate reward for intent
-        predicted_intents = set(
-            cat.strip().lower() for cat in parsed["intent"].split(",")
-        )
-        true_intents = set(cat.strip().lower() for cat in true_intent_str.split(","))
-
-        total_intent_labels = len(intent_categories)
-        fp_intent = len(predicted_intents - true_intents)
-        fn_intent = len(true_intents - predicted_intents)
-        hamming_loss_intent = (
-            (fp_intent + fn_intent) / total_intent_labels
-            if total_intent_labels > 0
-            else 1.0
-        )
-        reward_intent = 1.0 - hamming_loss_intent
-
-        # Calculate reward for emotion
-        predicted_emotions = set(
-            cat.strip().lower() for cat in parsed["emotion"].split(",")
-        )
-        true_emotions = set(cat.strip().lower() for cat in true_emotion_str.split(","))
-
-        total_emotion_labels = len(emotion_categories)
-        fp_emotion = len(predicted_emotions - true_emotions)
-        fn_emotion = len(true_emotions - predicted_emotions)
-        hamming_loss_emotion = (
-            (fp_emotion + fn_emotion) / total_emotion_labels
-            if total_emotion_labels > 0
-            else 1.0
-        )
-        reward_emotion = 1.0 - hamming_loss_emotion
-
-        # Average of both rewards
-        combined_reward = (reward_intent + reward_emotion) / 2.0
-        rewards.append(combined_reward)
-
-    if rewards:
-        logger.info(f"Hamming Loss Reward: {rewards[0]}")
-    return rewards
-
-
-def f1_score_reward(prompts, completions, answer, **kwargs) -> List[float]:
-    """
-    Reward function based on F1-score for both intent and emotion.
-    Returns combined F1 score for both predictions.
-    """
-    responses = _get_responses(completions)
-
-    rewards = []
-    for response, true_answer in zip(responses, answer):
-        parsed = parse_structured_response(response)
-
-        if not parsed["intent"] or not parsed["emotion"]:
+        if not parsed["intent"]:
             rewards.append(0.0)
             continue
 
         # Parse true answer
         try:
-            true_intent_str, true_emotion_str = true_answer.split("|")
+            true_intent_str, _ = true_answer.split("|")
         except ValueError:
             rewards.append(0.0)
             continue
@@ -174,6 +107,35 @@ def f1_score_reward(prompts, completions, answer, **kwargs) -> List[float]:
         else:
             f1_intent = 0.0
 
+        rewards.append(f1_intent)
+
+    if rewards:
+        logger.info(f"F1 Score Intent Reward: {rewards[0]}")
+        if wandb.run:
+            wandb.log({"f1_intent": rewards[0]})
+
+    return rewards
+
+
+def f1_score_emotion_reward(prompts, completions, answer, **kwargs) -> List[float]:
+    """Reward function based on F1-score for emotion only."""
+    responses = _get_responses(completions)
+
+    rewards = []
+    for response, true_answer in zip(responses, answer):
+        parsed = parse_structured_response(response)
+
+        if not parsed["emotion"]:
+            rewards.append(0.0)
+            continue
+
+        # Parse true answer
+        try:
+            _, true_emotion_str = true_answer.split("|")
+        except ValueError:
+            rewards.append(0.0)
+            continue
+
         # Calculate F1 for emotion
         predicted_emotions = set(
             cat.strip().lower() for cat in parsed["emotion"].split(",")
@@ -197,42 +159,55 @@ def f1_score_reward(prompts, completions, answer, **kwargs) -> List[float]:
         else:
             f1_emotion = 0.0
 
-        # Average of both F1 scores
-        combined_f1 = (f1_intent + f1_emotion) / 2.0
-        rewards.append(combined_f1)
+        rewards.append(f1_emotion)
 
     if rewards:
-        logger.info
+        logger.info(f"F1 Score Emotion Reward: {rewards[0]}")
         logger.info(f"Groundtruth: {answer[0]}")
         logger.info(f"Prediction: {responses[0]}")
-        logger.info(f"F1 Score Reward: {rewards[0]}")
         if wandb.run:
-            wandb.log(
-                {
-                    "groundtruth": answer[0],
-                    "prediction": responses[0],
-                }
-            )
+            wandb.log({
+                "f1_emotion": rewards[0],
+                "groundtruth": answer[0],
+                "prediction": responses[0],
+            })
+
     return rewards
 
 
-def accuracy_reward(prompts, completions, answer, **kwargs) -> List[float]:
-    """
-    Jaccard similarity based reward for both intent and emotion.
-    """
+def accuracy_intent_reward(prompts, completions, answer, **kwargs) -> List[float]:
+    """Jaccard similarity based reward for intent only."""
     responses = _get_responses(completions)
 
-    rewards = [_calculate_jaccard_score(response, true_answer)
-               for response, true_answer in zip(responses, answer)]
+    rewards = []
+    for response, true_answer in zip(responses, answer):
+        score = _calculate_jaccard_intent(response, true_answer)
+        rewards.append(score)
 
     if rewards:
-        logger.info(f"Accuracy Reward: {rewards[0]}")
+        logger.info(f"Accuracy Intent Reward: {rewards[0]}")
 
     return rewards
 
-def category_validity_reward(completions, **kwargs) -> List[float]:
-    """Reward function that checks if predicted categories are valid for both intent and emotion."""
-    global intent_categories, emotion_categories
+
+def accuracy_emotion_reward(prompts, completions, answer, **kwargs) -> List[float]:
+    """Jaccard similarity based reward for emotion only."""
+    responses = _get_responses(completions)
+
+    rewards = []
+    for response, true_answer in zip(responses, answer):
+        score = _calculate_jaccard_emotion(response, true_answer)
+        rewards.append(score)
+
+    if rewards:
+        logger.info(f"Accuracy Emotion Reward: {rewards[0]}")
+
+    return rewards
+
+
+def category_validity_intent_reward(completions, **kwargs) -> List[float]:
+    """Reward function that checks if predicted intent categories are valid."""
+    global intent_categories
     responses = _get_responses(completions)
 
     rewards = []
@@ -243,7 +218,7 @@ def category_validity_reward(completions, **kwargs) -> List[float]:
 
         parsed = parse_structured_response(response)
 
-        if not parsed["intent"] or not parsed["emotion"]:
+        if not parsed["intent"]:
             rewards.append(0.0)
             continue
 
@@ -257,6 +232,29 @@ def category_validity_reward(completions, **kwargs) -> List[float]:
         intent_validity = (
             valid_intent_count / total_intent_count if total_intent_count > 0 else 0.0
         )
+
+        rewards.append(intent_validity)
+
+    logger.info(f"Category Validity Intent Reward: {rewards[0]}")
+    return rewards
+
+
+def category_validity_emotion_reward(completions, **kwargs) -> List[float]:
+    """Reward function that checks if predicted emotion categories are valid."""
+    global emotion_categories
+    responses = _get_responses(completions)
+
+    rewards = []
+    for response in responses:
+        if not response:
+            rewards.append(0.0)
+            continue
+
+        parsed = parse_structured_response(response)
+
+        if not parsed["emotion"]:
+            rewards.append(0.0)
+            continue
 
         # Check emotion validity
         predicted_emotions = [
@@ -273,31 +271,27 @@ def category_validity_reward(completions, **kwargs) -> List[float]:
             else 0.0
         )
 
-        # Average validity of both
-        combined_validity = (intent_validity + emotion_validity) / 2.0
-        rewards.append(combined_validity)
-    logger.info(f"Category Validity Reward: {rewards[0]}")
+        rewards.append(emotion_validity)
+
+    logger.info(f"Category Validity Emotion Reward: {rewards[0]}")
     return rewards
 
 
-def squared_match_reward(prompts, completions, answer, **kwargs) -> List[float]:
-    """
-    Reward function where correct matches are squared.
-    Getting 2 correct gives 4x the reward of 1 correct (not 2x).
-    """
+def squared_match_intent_reward(prompts, completions, answer, **kwargs) -> List[float]:
+    """Reward function where correct intent matches are squared."""
     responses = _get_responses(completions)
 
     rewards = []
     for response, true_answer in zip(responses, answer):
         parsed = parse_structured_response(response)
 
-        if not parsed["intent"] or not parsed["emotion"]:
+        if not parsed["intent"]:
             rewards.append(0.0)
             continue
 
         # Parse true answer
         try:
-            true_intent_str, true_emotion_str = true_answer.split("|")
+            true_intent_str, _ = true_answer.split("|")
         except ValueError:
             rewards.append(0.0)
             continue
@@ -314,6 +308,33 @@ def squared_match_reward(prompts, completions, answer, **kwargs) -> List[float]:
             (correct_intent**2) / (total_intent**2) if total_intent > 0 else 0.0
         )
 
+        rewards.append(reward_intent)
+
+    if rewards:
+        logger.info(f"Squared Match Intent Reward: {rewards[0]}")
+
+    return rewards
+
+
+def squared_match_emotion_reward(prompts, completions, answer, **kwargs) -> List[float]:
+    """Reward function where correct emotion matches are squared."""
+    responses = _get_responses(completions)
+
+    rewards = []
+    for response, true_answer in zip(responses, answer):
+        parsed = parse_structured_response(response)
+
+        if not parsed["emotion"]:
+            rewards.append(0.0)
+            continue
+
+        # Parse true answer
+        try:
+            _, true_emotion_str = true_answer.split("|")
+        except ValueError:
+            rewards.append(0.0)
+            continue
+
         # Calculate squared match reward for emotion
         predicted_emotions = set(
             cat.strip().lower() for cat in parsed["emotion"].split(",")
@@ -326,25 +347,23 @@ def squared_match_reward(prompts, completions, answer, **kwargs) -> List[float]:
             (correct_emotion**2) / (total_emotion**2) if total_emotion > 0 else 0.0
         )
 
-        # Average of both rewards
-        combined_reward = (reward_intent + reward_emotion) / 2.0
-        rewards.append(combined_reward)
+        rewards.append(reward_emotion)
 
     if rewards:
-        logger.info(f"Squared Match Reward: {rewards[0]}")
+        logger.info(f"Squared Match Emotion Reward: {rewards[0]}")
 
     return rewards
 
 
-def _calculate_jaccard_score(response: str, true_answer: str) -> float:
-    """Helper function to calculate Jaccard score for intent and emotion."""
+def _calculate_jaccard_intent(response: str, true_answer: str) -> float:
+    """Helper function to calculate Jaccard score for intent only."""
     parsed = parse_structured_response(response)
 
-    if not parsed["intent"] or not parsed["emotion"]:
+    if not parsed["intent"]:
         return 0.0
 
     try:
-        true_intent_str, true_emotion_str = true_answer.split("|")
+        true_intent_str, _ = true_answer.split("|")
     except ValueError:
         return 0.0
 
@@ -356,6 +375,21 @@ def _calculate_jaccard_score(response: str, true_answer: str) -> float:
     union_intent = len(predicted_intents.union(true_intents))
     jaccard_intent = intersection_intent / union_intent if union_intent > 0 else 0.0
 
+    return jaccard_intent
+
+
+def _calculate_jaccard_emotion(response: str, true_answer: str) -> float:
+    """Helper function to calculate Jaccard score for emotion only."""
+    parsed = parse_structured_response(response)
+
+    if not parsed["emotion"]:
+        return 0.0
+
+    try:
+        _, true_emotion_str = true_answer.split("|")
+    except ValueError:
+        return 0.0
+
     # Calculate Jaccard for emotion
     predicted_emotions = set(cat.strip().lower() for cat in parsed["emotion"].split(","))
     true_emotions = set(cat.strip().lower() for cat in true_emotion_str.split(","))
@@ -364,12 +398,13 @@ def _calculate_jaccard_score(response: str, true_answer: str) -> float:
     union_emotion = len(predicted_emotions.union(true_emotions))
     jaccard_emotion = intersection_emotion / union_emotion if union_emotion > 0 else 0.0
 
-    return (jaccard_intent + jaccard_emotion) / 2.0
+    return jaccard_emotion
 
 
 def thinking_efficiency_reward(prompts, completions, answer, **kwargs) -> List[float]:
     """
     Reward: short thinking when correct, long thinking when incorrect.
+    Uses both intent and emotion accuracy.
     """
     responses = _get_responses(completions)
 
@@ -383,8 +418,10 @@ def thinking_efficiency_reward(prompts, completions, answer, **kwargs) -> List[f
 
         thinking_ratio = min(thinking_length / max_new_tokens, 1.0)
 
-        # Reuse Jaccard calculation
-        accuracy = _calculate_jaccard_score(response, true_answer)
+        # Calculate accuracy using both intent and emotion Jaccard
+        intent_accuracy = _calculate_jaccard_intent(response, true_answer)
+        emotion_accuracy = _calculate_jaccard_emotion(response, true_answer)
+        accuracy = (intent_accuracy + emotion_accuracy) / 2.0
 
         # High accuracy + short thinking = high reward
         # Low accuracy + long thinking = high reward
@@ -396,12 +433,3 @@ def thinking_efficiency_reward(prompts, completions, answer, **kwargs) -> List[f
         logger.info(f"Thinking Efficiency Reward: {rewards[0]}")
 
     return rewards
-
-
-def set_global_params(intent_cats: List[str], emotion_cats: List[str], max_tokens: int = 1024):
-    """Set the global categories lists for use in reward functions."""
-    global intent_categories, emotion_categories, max_new_tokens
-    intent_categories = [cat.lower() for cat in intent_cats]
-    emotion_categories = [cat.lower() for cat in emotion_cats]
-    max_new_tokens = max_tokens
-
