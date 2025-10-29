@@ -172,11 +172,13 @@ def f1_score_emotion_reward(prompts, completions, answer, **kwargs) -> List[floa
         logger.info(f"Groundtruth: {answer[0]}")
         logger.info(f"Prediction: {responses[0]}")
         if wandb.run:
-            wandb.log({
-                "f1_emotion": rewards[0],
-                "groundtruth": answer[0],
-                "prediction": responses[0],
-            })
+            wandb.log(
+                {
+                    "f1_emotion": rewards[0],
+                    "groundtruth": answer[0],
+                    "prediction": responses[0],
+                }
+            )
 
     return rewards
 
@@ -397,7 +399,9 @@ def _calculate_jaccard_emotion(response: str, true_answer: str) -> float:
         return 0.0
 
     # Calculate Jaccard for emotion
-    predicted_emotions = set(cat.strip().lower() for cat in parsed["emotion"].split(","))
+    predicted_emotions = set(
+        cat.strip().lower() for cat in parsed["emotion"].split(",")
+    )
     true_emotions = set(cat.strip().lower() for cat in true_emotion_str.split(","))
 
     intersection_emotion = len(predicted_emotions.intersection(true_emotions))
@@ -439,3 +443,11 @@ def thinking_efficiency_reward(prompts, completions, answer, **kwargs) -> List[f
         logger.info(f"Thinking Efficiency Reward: {rewards[0]}")
 
     return rewards
+
+
+def set_global_params(intent_cats, emotion_cats, max_tokens=1024):
+    """Set global parameters for reward functions."""
+    global intent_categories, emotion_categories, max_new_tokens
+    intent_categories = intent_cats
+    emotion_categories = emotion_cats
+    max_new_tokens = max_tokens

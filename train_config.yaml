@@ -1,14 +1,25 @@
-# model_name: "unsloth/Qwen3-4B-Thinking-2507"
-model_name: "Qwen/Qwen3-1.7B"
-max_seq_length: 2048
+model:
+  # model_name: "unsloth/Qwen3-4B-Thinking-2507"
+  model_name: "unsloth/Qwen3-1.7B"
+  max_seq_length: 2048
+  load_in_4bit: False
+  gpu_memory_utilization: 0.4
+  fast_inference: True
 
-training:
+lora:
+  r: 1
+  lora_alpha: 1
+  target_modules: ["q_proj", "k_proj", "v_proj", "o_proj", "gate_proj", "up_proj", "down_proj"]
+  use_gradient_checkpointing: "unsloth"
+  random_state: 3407
+
+trainer:
   learning_rate: 5e-6
   per_device_train_batch_size: 1
   gradient_accumulation_steps: 8
 
   num_train_epochs: 3
-  num_generations: 8
+  num_generations: 2
   max_prompt_length: 1024
   max_completion_length: 1024
 
@@ -16,13 +27,11 @@ training:
   save_steps: 50
   output_dir: "outputs"
   report_to: "wandb"
-  run_name: "proactive_grpo_classification"
+  run_name: "qwen1.7B-LoRA-2910"
 
   bf16: True
   max_grad_norm: 1.0
-  # model_init_kwargs:
-  #   torch_dtype: "bfloat16"
-  gradient_checkpointing: False # Disable - use FSDP activation checkpointing instead
+  beta: 0.1
 
   # Optimizer
   optim: "adamw_8bit"
@@ -32,7 +41,9 @@ training:
   warmup_ratio: 0.05
   lr_scheduler_type: "cosine"
 
+  importance_sampling_level: "sequence"
   loss_type: "dr_grpo"
+  scale_rewards: none
 
   # Data loading
   dataloader_num_workers: 4
@@ -42,20 +53,22 @@ training:
   save_total_limit: 10
 #  load_best_model_at_end: True
 
-  # vLLLM
-  use_vllm: True
-  vllm_mode: "colocate"
-  vllm_gpu_memory_utilization: 0.3
-  vllm_enable_sleep_mode: True
+  # vLLM - disable for LoRA training
+  use_vllm: False
+  # vllm_mode: "colocate"
+  # vllm_gpu_memory_utilization: 0.3
+  # vllm_enable_sleep_mode: True
 
 reward_funcs:
   - name: "f1_score_intent_reward"
     enabled: true
   - name: "f1_score_emotion_reward"
-    enabled: true
+    enabled: true 
   - name: "accuracy_intent_reward"
     enabled: true
   - name: "accuracy_emotion_reward"
+    enabled: true
+  - name: "squared_match_intent_reward"
     enabled: true
   - name: "category_validity_intent_reward"
     enabled: true
@@ -64,8 +77,6 @@ reward_funcs:
   - name: "squared_match_intent_reward"
     enabled: true
   - name: "squared_match_emotion_reward"
-    enabled: true
-  - name: "format_structure_reward"
     enabled: true
   - name: "thinking_efficiency_reward"
     enabled: true

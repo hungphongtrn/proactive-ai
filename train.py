@@ -1,6 +1,9 @@
+import os
+os.environ["UNSLOTH_VLLM_STANDBY"] = "1"
+
 import torch
+from unsloth import FastLanguageModel
 from trl import GRPOConfig, GRPOTrainer
-from transformers import AutoTokenizer
 from src.data_loader import DatasetProcessor
 from src.reward_funcs import (
     f1_score_intent_reward,
@@ -32,6 +35,7 @@ REWARD_FUNCTION_REGISTRY = {
     "thinking_efficiency_reward": thinking_efficiency_reward,
 }
 
+
 def main(
     config_path="train_config.yaml",
     categories_path="categories.yaml",
@@ -39,15 +43,26 @@ def main(
 ):
     with open(config_path, "r") as file:
         config = yaml.safe_load(file)
-    model_name = config["model_name"]
-    train_config = config["training"]
+    model_config = config["model"]
+    lora_config = config["lora"]
+    train_config = config["trainer"]
     reward_config = config["reward_funcs"]
 
-    logger.info("Starting multi-label classification training with GRPO")
+    logger.info(
+        "Starting multi-label classification training with GRPO using Unsloth + LoRA"
+    )
 
-    # Load model and tokenizer
-    model = model_name
-    tokenizer = AutoTokenizer.from_pretrained(model_name)
+    # Load LoRA configuration
+    # Load model and tokenizer with Unsloth
+    model, tokenizer = FastLanguageModel.from_pretrained(
+        **model_config,
+    )
+
+    # Apply LoRA
+    model = FastLanguageModel.get_peft_model(
+        model,
+        **lora_config,
+    )
 
     # Load dataset
     processor = DatasetProcessor(categories_path, prompt_path, tokenizer)
@@ -93,16 +108,33 @@ def main(
     trainer.train()
     logger.info("Training completed!")
 
-    # Save the trained model
-    if trainer.is_fsdp_enabled:
-        trainer.accelerator.state.fsdp_plugin.set_state_dict_type("FULL_STATE_DICT")
+    # Save the trained LoRA model
+    logger.info("Saving LoRA model...")
+    model.save_pretrained(train_config["output_dir"])
+    tokenizer.save_pretrained(train_config["output_dir"])
 
-    trainer.save_model(train_config["output_dir"])
+    # Optional: Save to 16bit for GGUF /hf merge
+    if train_config.get("save_16bit", False):
+        model.save_pretrained_merged(
+            train_config["output_dir"] + "_merged",
+            tokenizer,
+            save_method="merged_16bit",
+        )
+
+    # Optional: Save to 4bit
+    if train_config.get("save_4bit", False):
+        model.save_pretrained_merged(
+            train_config["output_dir"] + "_merged_4bit",
+            tokenizer,
+            save_method="merged_4bit_forced",
+        )
+
+    model.push_to_hub_merged(f"hungphongtran/{train_config['run_name']}", save_method = "merged_16bit")
 
 
 if __name__ == "__main__":
     main(
-        config_path="train_config.yaml",
-        categories_path="/workspace/proactive-ai/categories.yaml",
-        prompt_path="/workspace/proactive-ai/prompt.md",
+        config_path="./train_config.yaml",
+        categories_path="./categories.yaml",
+        prompt_path="./prompt.md",
     )

@@ -12,7 +12,10 @@ dependencies = [
     "nvitop>=1.5.3",
     "peft>=0.17.1",
     "torch>=2.8.0",
+    "transformers>=4.57.1",
     "trl>=0.19.1",
+    "unsloth-zoo>=2025.10.12",
+    "unsloth>=2025.10.11",
     "vllm>=0.10.2",
     "wandb>=0.22.0",
 ]
