@@ -13,6 +13,7 @@ from src.reward_funcs import (
     squared_match_intent_reward,
     squared_match_emotion_reward,
     thinking_efficiency_reward,
+    set_global_params
 )
 import yaml
 from loguru import logger

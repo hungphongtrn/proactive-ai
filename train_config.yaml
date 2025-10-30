@@ -49,17 +49,23 @@ training:
   vllm_enable_sleep_mode: True
 
 reward_funcs:
-  - name: "f1_score_reward"
+  - name: "f1_score_intent_reward"
     enabled: true
-  - name: "accuracy_reward"
+  - name: "f1_score_emotion_reward"
+    enabled: true
+  - name: "accuracy_intent_reward"
+    enabled: true
+  - name: "accuracy_emotion_reward"
+    enabled: true
+  - name: "category_validity_intent_reward"
+    enabled: true
+  - name: "category_validity_emotion_reward"
+    enabled: true
+  - name: "squared_match_intent_reward"
+    enabled: true
+  - name: "squared_match_emotion_reward"
     enabled: true
   - name: "format_structure_reward"
-    enabled: true
-  - name: "category_validity_reward"
-    enabled: true
-  - name: "hamming_loss_reward"
-    enabled: false
-  - name: "squared_match_reward"
     enabled: true
   - name: "thinking_efficiency_reward"
     enabled: true
