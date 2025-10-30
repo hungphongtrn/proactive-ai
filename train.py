@@ -1,8 +1,10 @@
 import os
+
 os.environ["UNSLOTH_VLLM_STANDBY"] = "1"
 
 import torch
 from unsloth import FastLanguageModel
+from vllm import SamplingParams
 from trl import GRPOConfig, GRPOTrainer
 from src.data_loader import DatasetProcessor
 from src.reward_funcs import (
@@ -87,7 +89,18 @@ def main(
     if "learning_rate" in train_config:
         train_config["learning_rate"] = float(train_config["learning_rate"])
 
-    training_args = GRPOConfig(**train_config)
+    vllm_sampling_params = SamplingParams(
+        min_p=0.1,
+        top_p=1.0,
+        top_k=-1,
+        seed=3407,
+        stop=[tokenizer.eos_token],
+        include_stop_str_in_output=True,
+    )
+
+    training_args = GRPOConfig(
+        vllm_sampling_params=vllm_sampling_params, **train_config
+    )
 
     enabled_rewards = []
     for rf_config in reward_config:
@@ -114,22 +127,24 @@ def main(
     tokenizer.save_pretrained(train_config["output_dir"])
 
     # Optional: Save to 16bit for GGUF /hf merge
-    if train_config.get("save_16bit", False):
-        model.save_pretrained_merged(
-            train_config["output_dir"] + "_merged",
-            tokenizer,
-            save_method="merged_16bit",
-        )
-
-    # Optional: Save to 4bit
-    if train_config.get("save_4bit", False):
+    if model_config.get("load_in_4bit"):
         model.save_pretrained_merged(
             train_config["output_dir"] + "_merged_4bit",
             tokenizer,
             save_method="merged_4bit_forced",
         )
-
-    model.push_to_hub_merged(f"hungphongtran/{train_config['run_name']}", save_method = "merged_16bit")
+        model.push_to_hub_merged(
+            f"hungphongtran/{train_config['run_name']}", save_method="merged_4bit"
+        )
+    else:
+        model.save_pretrained_merged(
+            train_config["output_dir"] + "_merged_16bit",
+            tokenizer,
+            save_method="merged_16bit",
+        )
+        model.push_to_hub_merged(
+            f"hungphongtran/{train_config['run_name']}", save_method="merged_16bit"
+        )
 
 
 if __name__ == "__main__":

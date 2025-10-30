@@ -205,3 +205,5 @@ __marimo__/
 unsloth_compiled_cache/
 CLAUDE.md
 wandb/
+grpo_trainer_lora_model/
+outputs/

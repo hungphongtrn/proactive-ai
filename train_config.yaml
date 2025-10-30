@@ -3,7 +3,7 @@ model:
   model_name: "unsloth/Qwen3-1.7B"
   max_seq_length: 2048
   load_in_4bit: False
-  gpu_memory_utilization: 0.4
+  gpu_memory_utilization: 0.3
   fast_inference: True
 
 lora:
@@ -14,12 +14,14 @@ lora:
   random_state: 3407
 
 trainer:
+  temperature: 1.0
   learning_rate: 5e-6
+
   per_device_train_batch_size: 1
   gradient_accumulation_steps: 8
-
+  temperature: 1.0
   num_train_epochs: 3
-  num_generations: 2
+  num_generations: 4
   max_prompt_length: 1024
   max_completion_length: 1024
 
@@ -54,10 +56,10 @@ trainer:
 #  load_best_model_at_end: True
 
   # vLLM - disable for LoRA training
-  use_vllm: False
-  # vllm_mode: "colocate"
+  use_vllm: True
+  vllm_mode: "colocate"
   # vllm_gpu_memory_utilization: 0.3
-  # vllm_enable_sleep_mode: True
+  vllm_enable_sleep_mode: True
 
 reward_funcs:
   - name: "f1_score_intent_reward"
