@@ -14,10 +14,16 @@ from src.reward_funcs import (
     squared_match_emotion_reward,
     thinking_efficiency_reward,
     set_global_params,
+    parse_structured_response,
 )
 import yaml
 from loguru import logger
 from tqdm import tqdm
+from vllm import SamplingParams, LLM
+from openai import OpenAI
+from dotenv import load_dotenv
+
+load_dotenv()
 
 # Define which reward functions to use - comment out to disable
 REWARD_FUNCTIONS = [
@@ -34,29 +40,50 @@ REWARD_FUNCTIONS = [
 ]
 
 
-def generate_response(model, tokenizer, prompt, max_new_tokens=1024, temperature=0.1):
+def generate_response(model, tokenizer, prompt, max_new_tokens=1024, temperature=0.1, use_vllm=False):
     """Generate response from model with given temperature."""
-    inputs = tokenizer(prompt, return_tensors="pt").to(model.device)
+    if use_vllm:
+        # vLLM handles generation differently
 
-    with torch.no_grad():
-        outputs = model.generate(
-            **inputs,
-            max_new_tokens=max_new_tokens,
-            temperature=temperature,
-            do_sample=True,
-            pad_token_id=tokenizer.pad_token_id,
-        )
+        sampling_params = SamplingParams(temperature=temperature, max_tokens=max_new_tokens)
+        outputs = model.generate([prompt], sampling_params)
+        return outputs[0].outputs[0].text
+    else:
+        inputs = tokenizer(prompt, return_tensors="pt").to(model.device)
+        with torch.no_grad():
+            outputs = model.generate(
+                **inputs,
+                max_new_tokens=max_new_tokens,
+                temperature=temperature,
+                do_sample=True,
+                pad_token_id=tokenizer.pad_token_id,
+            )
+        response = tokenizer.decode(outputs[0][inputs['input_ids'].shape[1]:], skip_special_tokens=True)
+        return response
 
-    response = tokenizer.decode(outputs[0][inputs['input_ids'].shape[1]:], skip_special_tokens=True)
-    return response
+def generate_response_api(prompt, model="gpt-5", max_tokens=1024, temperature=0.1):
+    """Generate response using OpenAI API."""
+    client = openai.OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+
+    response = client.chat.completions.create(
+        model=model,
+        messages=[{"role": "user", "content": prompt}],
+        max_tokens=max_tokens,
+        temperature=temperature
+    )
+
+    return response.choices[0].message.content
 
 
 def evaluate_model(
-        model_path,
+        model_path=None,
         config_path="train_config.yaml",
         categories_path="categories.yaml",
         prompt_path="prompt.md",
         output_csv="evaluation_results.csv",
+        use_vllm=False,
+        api_model=None,
+        tokenizer_name=None
 ):
     """Evaluate model on test dataset and save results to CSV."""
 
@@ -67,16 +94,28 @@ def evaluate_model(
     train_config = config["training"]
     max_completion_length = train_config.get("max_completion_length", 1024)
 
-    logger.info(f"Loading model from {model_path}")
+    # Initialize model based on mode
+    model = None
+    tokenizer = None
 
-    # Load model and tokenizer
-    tokenizer = AutoTokenizer.from_pretrained(model_path)
-    model = AutoModelForCausalLM.from_pretrained(
-        model_path,
-        torch_dtype=torch.bfloat16,
-        device_map="auto",
-    )
-    model.eval()
+    if api_model is None:
+        logger.info(f"Loading model from {model_path}")
+
+        if use_vllm:
+            model = LLM(model=model_path, dtype="bfloat16")
+        else:
+            tokenizer = AutoTokenizer.from_pretrained(model_path)
+            model = AutoModelForCausalLM.from_pretrained(
+                model_path,
+                torch_dtype=torch.bfloat16,
+                device_map="auto",
+            )
+            model.eval()
+    else:
+        logger.info(f"Using API model: {api_model}")
+        tokenizer = AutoTokenizer.from_pretrained(
+            tokenizer_name if tokenizer_name else model_path
+        )
 
     # Load test dataset
     processor = DatasetProcessor(categories_path, prompt_path, tokenizer)
@@ -99,19 +138,38 @@ def evaluate_model(
         ground_truth = sample["answer"]
 
         # Generate response
-        generation = generate_response(
-            model,
-            tokenizer,
-            prompt,
-            max_new_tokens=max_completion_length,
-            temperature=0.1
-        )
+        if api_model is not None:
+            generation = generate_response_api(
+                prompt,
+                model=api_model,
+                max_tokens=max_completion_length,
+                temperature=0.1
+            )
+        else:
+            generation = generate_response(
+                model,
+                tokenizer,
+                prompt,
+                max_new_tokens=max_completion_length,
+                temperature=0.1,
+                use_vllm=use_vllm
+            )
 
-        # Store basic info
+        # Parse prediction and ground truth
+        parsed = parse_structured_response(generation)
+        pred_intent = parsed["intent"]
+        pred_emotion = parsed["emotion"]
+
+        gt_intent, gt_emotion = ground_truth.split("|") if "|" in ground_truth else (ground_truth, "")
+
         result = {
             "speech": prompt,
             "generation": generation,
             "ground_truth": ground_truth,
+            "predict_intent": pred_intent.strip(),
+            "predict_emotion": pred_emotion.strip(),
+            "groundtruth_intent": gt_intent.strip(),
+            "groundtruth_emotion": gt_emotion.strip(),
         }
 
         # Calculate each enabled reward
@@ -134,7 +192,9 @@ def evaluate_model(
     logger.info("EVALUATION RESULTS")
     logger.info("=" * 50)
 
-    score_columns = [col for col in df.columns if col not in ["speech", "generation", "ground_truth"]]
+    score_columns = [col for col in df.columns if
+                     col not in ["speech", "generation", "ground_truth", "predict_intent", "predict_emotion",
+                                 "groundtruth_intent", "groundtruth_emotion"]]
     for col in score_columns:
         avg_score = df[col].mean()
         logger.info(f"{col}: {avg_score:.4f}")
@@ -178,6 +238,16 @@ if __name__ == "__main__":
         default="evaluation_results.csv",
         help="Output CSV file path"
     )
+    parser.add_argument(
+        "--api_model",
+        type=str,
+        default=None
+    )
+    parser.add_argument(
+        "--tokenizer_name",
+        type=str,
+        default=None
+    )
 
     args = parser.parse_args()
 
@@ -187,4 +257,7 @@ if __name__ == "__main__":
         categories_path=args.categories_path,
         prompt_path=args.prompt_path,
         output_csv=args.output_csv,
+        use_vllm=True,
+        api_model=None,
+        tokenizer_name='Qwen/Qwen3-1.7B'
     )
