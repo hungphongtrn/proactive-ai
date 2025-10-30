@@ -445,9 +445,3 @@ def thinking_efficiency_reward(prompts, completions, answer, **kwargs) -> List[f
     return rewards
 
 
-def set_global_params(intent_cats, emotion_cats, max_tokens=1024):
-    """Set global parameters for reward functions."""
-    global intent_categories, emotion_categories, max_new_tokens
-    intent_categories = intent_cats
-    emotion_categories = emotion_cats
-    max_new_tokens = max_tokens
