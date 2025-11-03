@@ -40,26 +40,49 @@ REWARD_FUNCTIONS = [
 ]
 
 
-def generate_response(model, tokenizer, prompt, max_new_tokens=1024, temperature=0.1, use_vllm=False):
-    """Generate response from model with given temperature."""
+def generate_responses_batch(model, prompts, max_new_tokens=1024, temperature=0.1, use_vllm=False, use_tqdm=True):
+    """Generate responses for multiple prompts efficiently using vLLM batching."""
     if use_vllm:
-        # vLLM handles generation differently
-
+        # vLLM handles batching automatically
         sampling_params = SamplingParams(temperature=temperature, max_tokens=max_new_tokens)
-        outputs = model.generate([prompt], sampling_params)
-        return outputs[0].outputs[0].text
+
+        if use_tqdm:
+            # Use smaller chunks for better progress tracking
+            # This allows vLLM to optimize while still showing progress
+            chunk_size = 32  # Process 32 prompts at a time for progress updates
+            all_outputs = []
+
+            total_chunks = (len(prompts) + chunk_size - 1) // chunk_size
+            pbar = tqdm(total=len(prompts), desc="Generating with vLLM")
+
+            for i in range(0, len(prompts), chunk_size):
+                chunk_prompts = prompts[i:i + chunk_size]
+                chunk_outputs = model.generate(chunk_prompts, sampling_params)
+                all_outputs.extend(chunk_outputs)
+                pbar.update(len(chunk_prompts))
+
+            pbar.close()
+            return [output.outputs[0].text for output in all_outputs]
+        else:
+            outputs = model.generate(prompts, sampling_params)
+            return [output.outputs[0].text for output in outputs]
     else:
-        inputs = tokenizer(prompt, return_tensors="pt").to(model.device)
-        with torch.no_grad():
-            outputs = model.generate(
-                **inputs,
-                max_new_tokens=max_new_tokens,
-                temperature=temperature,
-                do_sample=True,
-                pad_token_id=tokenizer.pad_token_id,
-            )
-        response = tokenizer.decode(outputs[0][inputs['input_ids'].shape[1]:], skip_special_tokens=True)
-        return response
+        # For non-vLLM case, process individually (no batching optimization)
+        responses = []
+        iterator = tqdm(prompts, desc="Generating responses") if use_tqdm else prompts
+        for prompt in iterator:
+            inputs = tokenizer(prompt, return_tensors="pt").to(model.device)
+            with torch.no_grad():
+                outputs = model.generate(
+                    **inputs,
+                    max_new_tokens=max_new_tokens,
+                    temperature=temperature,
+                    do_sample=True,
+                    pad_token_id=tokenizer.pad_token_id,
+                )
+            response = tokenizer.decode(outputs[0][inputs['input_ids'].shape[1]:], skip_special_tokens=True)
+            responses.append(response)
+        return responses
 
 def generate_response_api(prompt, model="gpt-5", max_tokens=1024, temperature=0.1):
     """Generate response using OpenAI API."""
@@ -83,7 +106,8 @@ def evaluate_model(
         output_csv="evaluation_results.csv",
         use_vllm=False,
         api_model=None,
-        tokenizer_name=None
+        tokenizer_name=None,
+        use_tqdm=True
 ):
     """Evaluate model on test dataset and save results to CSV."""
 
@@ -91,8 +115,8 @@ def evaluate_model(
     with open(config_path, "r") as file:
         config = yaml.safe_load(file)
 
-    train_config = config["training"]
-    max_completion_length = train_config.get("max_completion_length", 1024)
+    trainer_config = config["trainer"]
+    max_completion_length = trainer_config.get("max_completion_length", 1024)
 
     # Initialize model based on mode
     model = None
@@ -128,60 +152,111 @@ def evaluate_model(
 
     logger.info(f"Evaluating on {len(test_dataset)} test samples")
     logger.info(f"Active reward functions: {[name for name, _ in REWARD_FUNCTIONS]}")
+    if use_vllm:
+        logger.info(f"Using vLLM with continuous batching (sending all prompts at once)")
 
     # Prepare results storage
     results = []
 
-    # Evaluate each sample
-    for idx, sample in enumerate(tqdm(test_dataset, desc="Evaluating")):
-        prompt = sample["prompt"]
-        ground_truth = sample["answer"]
+    # Process all prompts at once with vLLM
+    if use_vllm and api_model is None:
+        # vLLM handles its own optimal batching, send all prompts at once
+        logger.info(f"Sending all {len(test_dataset)} prompts to vLLM at once")
 
-        # Generate response
-        if api_model is not None:
-            generation = generate_response_api(
-                prompt,
-                model=api_model,
-                max_tokens=max_completion_length,
-                temperature=0.1
-            )
-        else:
-            generation = generate_response(
-                model,
-                tokenizer,
-                prompt,
-                max_new_tokens=max_completion_length,
-                temperature=0.1,
-                use_vllm=use_vllm
-            )
+        # Prepare all data
+        all_prompts = [sample["prompt"] for sample in test_dataset]
+        all_ground_truths = [sample["answer"] for sample in test_dataset]
 
-        # Parse prediction and ground truth
-        parsed = parse_structured_response(generation)
-        pred_intent = parsed["intent"]
-        pred_emotion = parsed["emotion"]
+        # Generate all responses at once
+        all_generations = generate_responses_batch(
+            model,
+            all_prompts,
+            max_new_tokens=max_completion_length,
+            temperature=0.1,
+            use_vllm=True,
+            use_tqdm=use_tqdm
+        )
 
-        gt_intent, gt_emotion = ground_truth.split("|") if "|" in ground_truth else (ground_truth, "")
+        # Process each result
+        for sample_idx, (sample, generation, ground_truth) in enumerate(tqdm(zip(test_dataset, all_generations, all_ground_truths), total=len(test_dataset), desc="Processing Results")):
+            # Parse prediction and ground truth
+            parsed = parse_structured_response(generation)
+            pred_intent = parsed["intent"]
+            pred_emotion = parsed["emotion"]
 
-        result = {
-            "speech": prompt,
-            "generation": generation,
-            "ground_truth": ground_truth,
-            "predict_intent": pred_intent.strip(),
-            "predict_emotion": pred_emotion.strip(),
-            "groundtruth_intent": gt_intent.strip(),
-            "groundtruth_emotion": gt_emotion.strip(),
-        }
+            gt_intent, gt_emotion = ground_truth.split("|") if "|" in ground_truth else (ground_truth, "")
 
-        # Calculate each enabled reward
-        completions = [generation]
-        prompts = [prompt]
-        answers = [ground_truth]
+            result = {
+                "speech": all_prompts[sample_idx],
+                "generation": generation,
+                "ground_truth": ground_truth,
+                "predict_intent": pred_intent.strip(),
+                "predict_emotion": pred_emotion.strip(),
+                "groundtruth_intent": gt_intent.strip(),
+                "groundtruth_emotion": gt_emotion.strip(),
+            }
 
-        for reward_name, reward_func in REWARD_FUNCTIONS:
-            score = reward_func(prompts=prompts, completions=completions, answer=answers)[0]
-            result[reward_name] = score
+            # Calculate each enabled reward (still individual for reward functions)
+            completions = [generation]
+            prompts = [all_prompts[sample_idx]]
+            answers = [ground_truth]
 
-        results.append(result)
+            for reward_name, reward_func in REWARD_FUNCTIONS:
+                score = reward_func(prompts=prompts, completions=completions, answer=answers)[0]
+                result[reward_name] = score
+
+            results.append(result)
+    else:
+        # Original individual processing for non-vLLM or API models
+        for idx, sample in enumerate(tqdm(test_dataset, desc="Evaluating")):
+            prompt = sample["prompt"]
+            ground_truth = sample["answer"]
+
+            # Generate response
+            if api_model is not None:
+                generation = generate_response_api(
+                    prompt,
+                    model=api_model,
+                    max_tokens=max_completion_length,
+                    temperature=0.1
+                )
+            else:
+                generation = generate_responses_batch(
+                    model,
+                    [prompt],
+                    max_new_tokens=max_completion_length,
+                    temperature=0.1,
+                    use_vllm=False,
+                    use_tqdm=use_tqdm
+                )[0]
+
+            # Parse prediction and ground truth
+            parsed = parse_structured_response(generation)
+            pred_intent = parsed["intent"]
+            pred_emotion = parsed["emotion"]
+
+            gt_intent, gt_emotion = ground_truth.split("|") if "|" in ground_truth else (ground_truth, "")
+
+            result = {
+                "speech": prompt,
+                "generation": generation,
+                "ground_truth": ground_truth,
+                "predict_intent": pred_intent.strip(),
+                "predict_emotion": pred_emotion.strip(),
+                "groundtruth_intent": gt_intent.strip(),
+                "groundtruth_emotion": gt_emotion.strip(),
+            }
+
+            # Calculate each enabled reward
+            completions = [generation]
+            prompts = [prompt]
+            answers = [ground_truth]
+
+            for reward_name, reward_func in REWARD_FUNCTIONS:
+                score = reward_func(prompts=prompts, completions=completions, answer=answers)[0]
+                result[reward_name] = score
+
+            results.append(result)
 
     # Create DataFrame and save to CSV
     df = pd.DataFrame(results)
@@ -223,13 +298,13 @@ if __name__ == "__main__":
     parser.add_argument(
         "--categories_path",
         type=str,
-        default="/workspace/proactive-ai/categories.yaml",
+        default="categories.yaml",
         help="Path to categories file"
     )
     parser.add_argument(
         "--prompt_path",
         type=str,
-        default="/workspace/proactive-ai/prompt.md",
+        default="prompt.md",
         help="Path to prompt file"
     )
     parser.add_argument(
@@ -248,8 +323,21 @@ if __name__ == "__main__":
         type=str,
         default=None
     )
-
+    parser.add_argument(
+        "--use_tqdm",
+        action="store_true",
+        default=True,
+        help="Show progress bars during generation and evaluation"
+    )
+    parser.add_argument(
+        "--no_tqdm",
+        action="store_true",
+        help="Disable progress bars"
+    )
     args = parser.parse_args()
+
+    # Handle tqdm arguments
+    use_tqdm = not args.no_tqdm and args.use_tqdm
 
     evaluate_model(
         model_path=args.model_path,
@@ -259,5 +347,6 @@ if __name__ == "__main__":
         output_csv=args.output_csv,
         use_vllm=True,
         api_model=None,
-        tokenizer_name='Qwen/Qwen3-1.7B'
+        tokenizer_name='Qwen/Qwen3-1.7B',
+        use_tqdm=use_tqdm
     )

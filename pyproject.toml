@@ -19,6 +19,7 @@ dependencies = [
     "unsloth-zoo>=2025.10.12",
     "vllm>=0.10.2",
     "wandb>=0.22.0",
+    "flashinfer-python>=0.3.1.post1",
 ]
 
 [tool.uv.sources]
