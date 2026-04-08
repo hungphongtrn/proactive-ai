@@ -1,0 +1,15 @@
+experiment_name: "default"
+model_base_path: ""  # Set to local path of GPT-oss-20B weights
+routing_ks: [1, 2, 4, 8, 16, 32, 64]
+temperatures: [1.0, 1.3, 1.6]
+n_samples: 16
+dataset_name: "VietMedTeam/proactive-ai-dataset-2000"
+prompt_quantity_path: "prompts/prompt_eval_maxims.md"
+prompt_implicature_path: "prompts/prompt_eval_implicature_only.md"
+judge_model: "gpt-5"
+judge_prompt_path: "prompts/prompt_judge.md"
+output_dir: "moe_sweep/outputs"
+vllm_base_port: 8000
+max_concurrent_requests: 32
+test_size: 0.1
+seed: 42

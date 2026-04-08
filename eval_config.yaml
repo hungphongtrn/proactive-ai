@@ -1,0 +1,42 @@
+dataset:
+  name: "VietMedTeam/proactive-ai-dataset-2000"
+  test_size: 0.1
+  seed: 42
+  test_num: null  # null = all, or integer to limit
+  split: "test"  # "test" | "all"
+
+input:
+  type: "text"  # "text" | "voice"
+  voice:
+    data_dir: "voice_data/noisy_out_music/snr_0.5db"
+    file_pattern: "voice_{dialog_id}.wav"
+
+model:
+  provider: "openai"  # "openai" | "openrouter" (uses OPENROUTER_API_KEY env var)
+  backend: "openai"  # "openai" | "gemini" | "cascade"
+  name: "gpt-5"  # model name (for openrouter use e.g. "anthropic/claude-sonnet-4", "google/gemini-2.5-flash")
+  audio_model: "gpt-4o-audio-preview"  # for openai + voice
+  gemini_model: "gemini-2.5-flash"  # for gemini backend
+  cascade:
+    stt_model: "nova-3"
+    llm_model: "gpt-5"
+
+judge:
+  enabled: true
+  model: "gpt-5"
+  prompt_path: "prompts/prompt_judge.md"
+
+concurrency:
+  max_workers: 10
+  judge_workers: 20
+
+prompt:
+  template_path: "prompts/prompt_eval_all.md"
+  categories_path: "categories.yaml"
+
+output:
+  dir: "outputs/eval"
+  tag: "all_columns"  # scenario tag → becomes {model}_{DDMM}/{tag}.csv
+  # Auto-generated name: {tag}_{input_type}_{model}_{YYYYMMDD}.csv
+  # Set custom_name to override auto-naming, e.g. "my_experiment.csv"
+  custom_name: null

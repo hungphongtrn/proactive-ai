@@ -1,4 +1,5 @@
 import torch
+import os
 import pandas as pd
 from transformers import AutoTokenizer, AutoModelForCausalLM
 from src.data_loader import DatasetProcessor
@@ -14,16 +15,13 @@ from src.reward_funcs import (
     squared_match_emotion_reward,
     thinking_efficiency_reward,
     set_global_params,
-    parse_structured_response,
+    parse_structured_response
 )
 import yaml
 from loguru import logger
 from tqdm import tqdm
 from vllm import SamplingParams, LLM
-from openai import OpenAI
-from dotenv import load_dotenv
-
-load_dotenv()
+import openai
 
 # Define which reward functions to use - comment out to disable
 REWARD_FUNCTIONS = [

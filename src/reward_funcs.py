@@ -439,3 +439,11 @@ def thinking_efficiency_reward(prompts, completions, answer, **kwargs) -> List[f
         logger.info(f"Thinking Efficiency Reward: {rewards[0]}")
 
     return rewards
+
+def set_global_params(intent_cats: List[str], emotion_cats: List[str], max_tokens: int = 1024):
+    """Set the global categories lists for use in reward functions."""
+    global intent_categories, emotion_categories, max_new_tokens
+    intent_categories = [cat.lower() for cat in intent_cats]
+    emotion_categories = [cat.lower() for cat in emotion_cats]
+    max_new_tokens = max_tokens
+
